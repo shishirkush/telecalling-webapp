@@ -497,9 +497,13 @@
     await loadProfileAndQueue();
     // Only a fresh credential sign-in, not a boot() that found an
     // already-valid session — otherwise every reopen would look like a
-    // new login. Fire-and-forget, same as the version report right
-    // after it in loadProfileAndQueue.
-    retryRpc("log_login_event", { p_event: "login", p_platform: "web" });
+    // new login. Awaited, unlike the version report in
+    // loadProfileAndQueue: confirmed live that an un-awaited call here
+    // can lose the request entirely if the page navigates away before
+    // the fetch completes (a browser cancels in-flight requests on
+    // navigation — there's no equivalent risk in the Android app, where
+    // a coroutine keeps running independent of screen navigation).
+    await retryRpc("log_login_event", { p_event: "login", p_platform: "web" });
   };
   $("togglePw").onclick = () => {
     const pw = $("loginPw");
