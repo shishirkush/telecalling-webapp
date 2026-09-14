@@ -1,0 +1,1112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Telecalling</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f7f9fc;
+    --surface:     #ffffff;
+    --surface-alt: #edf1f7;
+    --text:        #0b0b0b;
+    --text-2:      #52514e;
+    --text-muted:  #898781;
+    --border:      rgba(11,11,11,0.10);
+    --navy:        #1b4d89;
+    --navy-dark:   #12365f;
+    --sky:         #d6e4f5;
+    --good:        #0ca30c;
+    --critical:    #b3261e;
+
+    --s-lead:           #1b7f4b;
+    --s-call-later:     #b26a00;
+    --s-not-interested: #9a3b3b;
+    --s-wrong-number:   #6b4f8a;
+    --s-switched-off:   #5a6472;
+    --s-no-answer:      #2e6da4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page:        #11151a;
+      --surface:     #171c22;
+      --surface-alt: #232a32;
+      --text:        #ffffff;
+      --text-2:      #c3c2b7;
+      --text-muted:  #898781;
+      --border:      rgba(255,255,255,0.12);
+      --navy:        #9cc3f0;
+      --navy-dark:   #00325c;
+      --sky:         #12365f;
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text);
+    font: 15px/1.45 -apple-system, system-ui, "Segoe UI", sans-serif;
+    overscroll-behavior-y: contain;
+  }
+  a { color: var(--navy); }
+  .hidden { display: none !important; }
+
+  button, input, select, textarea {
+    font: inherit; color: var(--text);
+  }
+  button { cursor: pointer; }
+
+  /* ---- top bar ---- */
+  header.bar {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--sky); color: var(--navy-dark);
+    padding: 12px 14px; padding-top: max(12px, env(safe-area-inset-top));
+    display: flex; align-items: center; gap: 10px;
+  }
+  header.bar h1 { font-size: 17px; margin: 0; font-weight: 700; line-height: 1.2; }
+  header.bar .who { font-size: 12px; opacity: 0.8; }
+  header.bar .spacer { flex: 1; }
+  header.bar button.icon {
+    background: none; border: none; padding: 6px; font-size: 20px;
+    color: var(--navy-dark); line-height: 1;
+  }
+  header.bar button.back { font-size: 22px; padding: 4px 8px 4px 0; }
+
+  main.screen { padding: 14px; padding-bottom: 100px; max-width: 560px; margin: 0 auto; }
+
+  /* ---- device notice ---- */
+  #deviceNotice {
+    background: var(--surface-alt); border-bottom: 1px solid var(--border);
+    padding: 8px 14px; font-size: 12.5px; color: var(--text-2);
+    display: flex; align-items: center; gap: 10px;
+  }
+  #deviceNotice button { background: none; border: none; color: var(--text-muted); font-size: 16px; padding: 2px 6px; }
+
+  /* ---- tabs ---- */
+  .tabs {
+    display: flex; background: var(--surface); border-bottom: 1px solid var(--border);
+    position: sticky; top: 53px; z-index: 4;
+  }
+  .tabs button {
+    flex: 1; background: none; border: none; padding: 12px 6px;
+    font-size: 13.5px; font-weight: 600; color: var(--text-muted);
+    border-bottom: 3px solid transparent;
+  }
+  .tabs button.active { color: var(--navy); border-color: var(--navy); }
+
+  /* ---- login ---- */
+  .login-wrap {
+    max-width: 340px; margin: 14vh auto 0; padding: 0 20px;
+    text-align: center;
+  }
+  .login-wrap h1 { color: var(--navy); font-size: 22px; margin: 0 0 6px; }
+  .login-wrap p.sub { color: var(--text-2); font-size: 13.5px; margin: 0 0 28px; }
+
+  /* ---- form controls ---- */
+  .field { margin-bottom: 14px; text-align: left; }
+  .field label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 5px; }
+  .field input, .field textarea, .field select {
+    width: 100%; padding: 12px 13px; border: 1px solid var(--border);
+    border-radius: 10px; background: var(--surface); font-size: 16px;
+  }
+  .field textarea { resize: vertical; min-height: 70px; }
+  .field .hint { font-size: 11.5px; color: var(--text-muted); margin-top: 4px; text-align: right; }
+  .pw-wrap { position: relative; }
+  .pw-wrap button { position: absolute; right: 6px; top: 6px; bottom: 6px; background: none; border: none; color: var(--text-muted); padding: 0 8px; font-size: 12.5px; }
+
+  button.primary {
+    width: 100%; background: var(--navy); color: #fff; border: none;
+    border-radius: 12px; padding: 15px; font-size: 16px; font-weight: 600;
+  }
+  button.primary:disabled { opacity: .55; }
+  button.secondary {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; font-size: 14px; font-weight: 500; color: var(--text);
+  }
+
+  .banner-err, .banner-info {
+    border-radius: 10px; padding: 12px 14px; font-size: 13.5px; margin: 12px 0;
+  }
+  .banner-err { background: rgba(179,38,30,0.12); color: var(--critical); }
+  .banner-info { background: var(--sky); color: var(--navy-dark); }
+
+  /* ---- queue ---- */
+  .queue-hint { font-size: 12.5px; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; margin: 4px 0 8px; }
+  .lead-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
+  }
+  .lead-card .body { flex: 1; min-width: 0; }
+  .lead-card .name { font-size: 15.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lead-card .company { font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lead-card .cb { font-size: 12px; margin-top: 5px; display: flex; align-items: center; gap: 4px; }
+  .lead-card .cb.overdue { color: var(--critical); font-weight: 600; }
+  .lead-card .cb.pending { color: var(--s-call-later); }
+  .lead-card .side { text-align: right; flex: none; }
+  .call-pill {
+    display: inline-flex; align-items: center; gap: 5px; background: rgba(27,77,137,0.12);
+    color: var(--navy); border-radius: 8px; padding: 7px 11px; font-size: 13px; font-weight: 600;
+    text-decoration: none; border: none;
+  }
+  .status-chip {
+    display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 600;
+    margin-top: 6px;
+  }
+  .attempts { font-size: 11.5px; color: var(--text-muted); margin-top: 4px; }
+  .empty-state { text-align: center; color: var(--text-2); padding: 60px 20px; font-size: 14px; }
+  .empty-state .hint2 { font-size: 12.5px; color: var(--text-muted); margin-top: 6px; }
+
+  .fab {
+    position: fixed; right: 18px; bottom: max(18px, env(safe-area-inset-bottom));
+    background: var(--navy); color: #fff; border: none; border-radius: 999px;
+    padding: 15px 20px; font-size: 15px; font-weight: 700; box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    display: flex; align-items: center; gap: 8px; z-index: 6;
+  }
+
+  /* ---- lead detail ---- */
+  .call-banner {
+    display: flex; align-items: center; gap: 14px; background: var(--navy); color: #fff;
+    border-radius: 14px; padding: 18px; text-decoration: none; margin-bottom: 14px;
+  }
+  .call-banner .icon { font-size: 26px; }
+  .call-banner .title { font-size: 19px; font-weight: 700; }
+  .call-banner .sub { font-size: 12.5px; opacity: 0.85; }
+  .text-apply-btn {
+    display: block; text-align: center; text-decoration: none;
+    background: var(--surface-alt); color: var(--text); border-radius: 10px;
+    padding: 12px; font-size: 13.5px; font-weight: 600; margin-bottom: 14px;
+  }
+
+  .record-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .rf-row { display: flex; padding: 7px 0; gap: 10px; }
+  .rf-row .l { width: 132px; flex: none; font-size: 13px; color: var(--text-2); }
+  .rf-row .v { font-size: 14.5px; flex: 1; }
+  .rf-row .v.emph { font-weight: 700; color: var(--navy); font-size: 15.5px; }
+  .edit-link { text-align: right; margin-top: 6px; }
+  .edit-link button { background: none; border: none; color: var(--navy); font-size: 13.5px; font-weight: 600; padding: 4px; }
+  .prev-attempts { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; font-size: 12.5px; color: var(--text-2); }
+
+  .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); margin: 18px 0 8px; }
+
+  .status-row {
+    display: flex; align-items: center; gap: 12px; padding: 14px; margin-bottom: 8px;
+    border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+  }
+  .status-row .dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--text-muted); flex: none; }
+  .status-row.selected { border-width: 2px; }
+  .status-row.selected .dot { border: none; }
+  .status-row.selected .dot::after { content: "✓"; display: block; color: #fff; font-size: 12px; text-align: center; line-height: 18px; }
+  .status-row .label { font-size: 15px; font-weight: 500; }
+  .status-row.selected .label { font-weight: 700; }
+
+  .chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--border); border-radius: 999px; padding: 9px 15px; font-size: 13.5px;
+    background: var(--surface); color: var(--text);
+  }
+  .chip.selected { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+  .cb-current {
+    display: flex; align-items: center; gap: 10px; border: 1px solid var(--border);
+    border-radius: 10px; padding: 13px; margin-top: 10px; font-size: 14.5px;
+  }
+  input[type="datetime-local"] { width: 100%; margin-top: 8px; }
+
+  .save-bar { position: sticky; bottom: 0; background: var(--page); padding: 14px 0 6px; margin-top: 6px; }
+
+  /* ---- search ---- */
+  .search-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .search-row input { flex: 1; }
+  .search-row button { background: var(--navy); color: #fff; border: none; border-radius: 10px; padding: 0 16px; font-size: 18px; }
+  .search-hint { font-size: 12.5px; color: var(--text-2); margin-bottom: 12px; }
+  .search-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+  .search-card .mob { color: var(--navy); font-weight: 600; margin-top: 4px; font-size: 13.5px; }
+
+  /* ---- modal (search detail, sim picker n/a) ---- */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 20;
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  .modal-sheet {
+    background: var(--surface); border-radius: 16px 16px 0 0; padding: 20px;
+    width: 100%; max-width: 560px; max-height: 80vh; overflow-y: auto;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+  .modal-sheet h2 { margin: 0 0 12px; font-size: 17px; }
+  .modal-sheet .close-row { text-align: right; margin-top: 14px; }
+
+  .spinner {
+    width: 20px; height: 20px; border: 2.5px solid rgba(255,255,255,0.4);
+    border-top-color: #fff; border-radius: 50%; display: inline-block;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .center-spin { text-align: center; padding: 60px 0; }
+  .center-spin .spinner { border-color: rgba(27,77,137,0.25); border-top-color: var(--navy); }
+</style>
+</head>
+<body>
+
+<div id="deviceNotice" class="hidden">
+  <span>This app is built for a phone. Some things may not work well on a desktop browser.</span>
+  <button id="dismissDeviceNotice">✕</button>
+</div>
+
+<!-- =============== LOGIN =============== -->
+<div id="screenLogin">
+  <div class="login-wrap">
+    <h1>Telecalling</h1>
+    <p class="sub">Use the login ID and password your supervisor gave you</p>
+    <div class="field">
+      <label for="loginId">Login ID</label>
+      <input id="loginId" type="text" autocomplete="username" autocapitalize="none" autocorrect="off">
+    </div>
+    <div class="field">
+      <label for="loginPw">Password</label>
+      <div class="pw-wrap">
+        <input id="loginPw" type="password" autocomplete="current-password">
+        <button id="togglePw" type="button">Show</button>
+      </div>
+    </div>
+    <button class="primary" id="signInBtn">Sign in</button>
+    <div id="loginError"></div>
+  </div>
+</div>
+
+<!-- =============== APP (Queue / CallBacks / Apply Card) =============== -->
+<div id="screenApp" class="hidden">
+  <header class="bar">
+    <div>
+      <h1>My queue</h1>
+      <div class="who" id="whoami"></div>
+    </div>
+    <span class="spacer"></span>
+    <button class="icon" id="openSearchBtn" title="Search customer">🔍</button>
+    <button class="icon" id="refreshBtn" title="Refresh">⟳</button>
+    <button class="icon" id="signOutBtn" title="Sign out">⎋</button>
+  </header>
+  <div class="tabs">
+    <button data-tab="0" class="active">Queue</button>
+    <button data-tab="1">CallBacks <span id="cbCount"></span></button>
+    <button data-tab="2">Apply Card</button>
+  </div>
+  <main class="screen" id="queueBody"></main>
+  <button class="fab hidden" id="nextLeadBtn">+ Next lead</button>
+</div>
+
+<!-- =============== LEAD DETAIL =============== -->
+<div id="screenDetail" class="hidden">
+  <header class="bar">
+    <button class="icon back" id="detailBackBtn">←</button>
+    <h1 id="detailTitle"></h1>
+  </header>
+  <main class="screen" id="detailBody"></main>
+</div>
+
+<!-- =============== SEARCH =============== -->
+<div id="screenSearch" class="hidden">
+  <header class="bar">
+    <button class="icon back" id="searchBackBtn">←</button>
+    <h1>Search customer</h1>
+  </header>
+  <main class="screen" id="searchBody"></main>
+</div>
+
+<div id="modalHost"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // -----------------------------------------------------------------
+  // Config — same project as the Android app and the supervisor
+  // dashboard. The anon key is meant to be public; RLS is what actually
+  // scopes an agent to their own leads. See backend/*.sql in the main
+  // telecalling repo for the schema and RPCs this calls.
+  // -----------------------------------------------------------------
+  const SUPABASE_URL = "https://bpzfwdcbzkkvwearyzkh.supabase.co";
+  const SUPABASE_ANON_KEY =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwemZ3ZGNiemtrdndlYXJ5emtoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNTE3NTQsImV4cCI6MjEwMzkyNzc1NH0.Wq2HJW9T6gDeR2XmP7CPnedLYvG5O8tGKU19M7JVs7c";
+  const LOGIN_DOMAIN = "telecall.local"; // must match android/app/build.gradle.kts + dashboard/index.html
+
+  // Tags this client's reports distinctly from the Android APK's own
+  // version string, so App versions on the dashboard is honest about
+  // which channel an agent is actually on.
+  const WEB_APP_VERSION = "1.9.4-web";
+
+  // The Apply Card SMS (SimManager.kt's APPLY_CARD_SMS_TEXT on Android)
+  // cannot be sent silently from a browser — there is no such API on
+  // iOS or Android mobile web, full stop, not a gap in this code. The
+  // closest honest equivalent is opening the phone's own Messages app
+  // pre-filled with the text; the agent still taps Send themselves.
+  const APPLY_CARD_SMS_TEXT = "Apply for the best Credit Card, www.cardadda.in";
+  const APPLY_CARD_URL = "https://www.cardadda.in/";
+
+  const UNKNOWN_NAME = "Name not provided"; // must match AppViewModel.kt / dashboard/index.html
+
+  const STATUS_META = [
+    { wire: "SWITCHED_OFF",   label: "Switched Off",   color: "var(--s-switched-off)" },
+    { wire: "NO_ANSWER",      label: "No Answer",      color: "var(--s-no-answer)" },
+    { wire: "WRONG_NUMBER",   label: "Wrong No.",      color: "var(--s-wrong-number)" },
+    { wire: "NOT_INTERESTED", label: "Not Interested", color: "var(--s-not-interested)" },
+    { wire: "CALL_LATER",     label: "Call Later",     color: "var(--s-call-later)" },
+    { wire: "LEAD",           label: "Lead",           color: "var(--s-lead)" }
+  ];
+  const statusMeta = wire => STATUS_META.find(s => s.wire === wire);
+
+  const QUALITY_META = [
+    { wire: "HOT",  label: "Hot" },
+    { wire: "WARM", label: "Warm" },
+    { wire: "COLD", label: "Cold" }
+  ];
+
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g,
+    c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+  const show = (el, on) => el.classList.toggle("hidden", !on);
+
+  // -----------------------------------------------------------------
+  // State — one object, mirroring AppViewModel.kt's UiState so anyone
+  // who knows the Android app can find their way around this file.
+  // -----------------------------------------------------------------
+  let state = {
+    screen: "login",           // login | app | detail | search
+    tab: 0,                    // 0 Queue, 1 CallBacks, 2 Apply Card
+    loading: false,
+    saving: false,
+    error: null,
+    info: null,
+
+    profile: null,
+    queue: [],
+    selected: null,
+    hasCalledThisLead: false,
+
+    formStatus: null,
+    formQuality: null,
+    formRemarks: "",
+    formCallbackAt: null,      // epoch ms
+
+    editing: false,
+    editName: "", editEmail: "", editDob: "", editCompany: "", editIncome: "", editAddress: "",
+
+    searchQuery: "",
+    searching: false,
+    searchError: null,
+    searchResults: [],
+    searchSelected: null
+  };
+
+  function setState(patch) {
+    state = Object.assign({}, state, patch);
+    render();
+  }
+
+  function needsQuality() { return state.formStatus === "LEAD"; }
+  function needsCallback() { return state.formStatus === "CALL_LATER"; }
+  function canSave() {
+    return !!state.formStatus &&
+      (!needsQuality() || !!state.formQuality) &&
+      (!needsCallback() || state.formCallbackAt != null) &&
+      !state.saving;
+  }
+
+  // -----------------------------------------------------------------
+  // Format helpers — mirror ui/Format.kt. MASK_SENSITIVE is false on
+  // the Android app (agents see full data), so this does too.
+  // -----------------------------------------------------------------
+  function formatRupees(n) {
+    if (n == null) return "—";
+    return "₹" + Math.round(n).toLocaleString("en-IN");
+  }
+  function formatDob(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso + "T00:00:00");
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  }
+  function formatTimestamp(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
+  }
+  function isPast(iso) {
+    if (!iso) return false;
+    const d = new Date(iso);
+    return !isNaN(d) && d.getTime() < Date.now();
+  }
+  function formatEpoch(ms) {
+    if (ms == null) return "Not set";
+    return new Date(ms).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
+  }
+
+  // -----------------------------------------------------------------
+  // Auth
+  // -----------------------------------------------------------------
+  function loginIdToEmail(id) {
+    const v = String(id || "").trim().toLowerCase();
+    return v.includes("@") ? v : `${v}@${LOGIN_DOMAIN}`;
+  }
+
+  async function boot() {
+    detectDesktop();
+    const { data } = await sb.auth.getSession();
+    if (data && data.session) {
+      setState({ screen: "app" });
+      await loadProfileAndQueue();
+    } else {
+      setState({ screen: "login" });
+    }
+  }
+
+  $("signInBtn").onclick = async () => {
+    const loginId = $("loginId").value.trim();
+    const password = $("loginPw").value;
+    if (!loginId || !password) {
+      setState({ error: "Enter your login ID and password." });
+      return;
+    }
+    setState({ loading: true, error: null });
+    const { error } = await sb.auth.signInWithPassword({
+      email: loginIdToEmail(loginId), password
+    });
+    if (error) {
+      const msg = /invalid login|invalid_grant/i.test(error.message)
+        ? "Incorrect login ID or password."
+        : /email not confirmed/i.test(error.message)
+          ? "This account is not active yet. Ask your supervisor to confirm it."
+          : error.message;
+      setState({ loading: false, error: msg });
+      return;
+    }
+    setState({ loading: false, screen: "app", error: null });
+    await loadProfileAndQueue();
+  };
+  $("togglePw").onclick = () => {
+    const pw = $("loginPw");
+    pw.type = pw.type === "password" ? "text" : "password";
+    $("togglePw").textContent = pw.type === "password" ? "Show" : "Hide";
+  };
+  ["loginId", "loginPw"].forEach(id =>
+    $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("signInBtn").click(); }));
+
+  $("signOutBtn").onclick = async () => {
+    await sb.auth.signOut();
+    state = { screen: "login", tab: 0, loading: false, saving: false, error: null, info: null,
+      profile: null, queue: [], selected: null, hasCalledThisLead: false,
+      formStatus: null, formQuality: null, formRemarks: "", formCallbackAt: null,
+      editing: false, editName: "", editEmail: "", editDob: "", editCompany: "", editIncome: "", editAddress: "",
+      searchQuery: "", searching: false, searchError: null, searchResults: [], searchSelected: null };
+    render();
+  };
+
+  // -----------------------------------------------------------------
+  // Telemetry — retried like LeadRepository.kt's retryRpc: 3 attempts,
+  // 2s apart, only for background calls with no UI to retry from. Never
+  // used for sign-in/save/search — those already get retried by the
+  // agent themselves.
+  // -----------------------------------------------------------------
+  async function retryRpc(name, params, attempts = 3) {
+    for (let i = 0; i < attempts; i++) {
+      const { error } = await sb.rpc(name, params);
+      if (!error) return;
+      if (i < attempts - 1) await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // Queue
+  // -----------------------------------------------------------------
+  async function loadProfileAndQueue() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) { setState({ screen: "login" }); return; }
+
+    const { data: profile, error: pErr } = await sb.from("profiles")
+      .select("*").eq("id", user.id).single();
+    if (pErr || !profile) {
+      setState({ error: "Your account has no profile row. Ask your supervisor to activate it." });
+    } else {
+      setState({ profile });
+    }
+
+    await refreshQueue();
+
+    // Fire-and-forget, same as AppViewModel.kt's own coroutine — must
+    // never be able to slow down or fail the queue load above. No
+    // device_id equivalent to ANDROID_ID exists on the web without
+    // fingerprinting, so only the version + a browser/OS label go.
+    retryRpc("report_app_version", {
+      p_version: WEB_APP_VERSION,
+      p_device_model: webDeviceLabel()
+    });
+  }
+
+  function webDeviceLabel() {
+    const ua = navigator.userAgent;
+    const os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" :
+      /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" :
+      /Windows/.test(ua) ? "Windows" : "Unknown OS";
+    const browser = /CriOS/.test(ua) ? "Chrome" : /FxiOS/.test(ua) ? "Firefox" :
+      /Safari/.test(ua) && !/Chrome/.test(ua) ? "Safari" : /Chrome/.test(ua) ? "Chrome" : "Browser";
+    return `Web · ${os} (${browser})`;
+  }
+
+  function detectDesktop() {
+    const looksMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+      (window.innerWidth <= 820 && "ontouchstart" in window);
+    show($("deviceNotice"), !looksMobile);
+  }
+  $("dismissDeviceNotice").onclick = () => show($("deviceNotice"), false);
+
+  async function refreshQueue() {
+    setState({ loading: true, error: null });
+    const uid = state.profile?.id || (await sb.auth.getUser()).data.user?.id;
+    const { data, error } = await sb.from("leads")
+      .select("*")
+      .eq("assigned_to", uid)
+      .eq("is_closed", false)
+      .order("callback_at", { ascending: true, nullsFirst: false })
+      .order("id", { ascending: true })
+      .limit(100);
+    if (error) { setState({ loading: false, error: error.message }); return; }
+    setState({ loading: false, queue: data || [] });
+  }
+  $("refreshBtn").onclick = () => { if (state.screen === "app") refreshQueue(); };
+
+  async function claimNext() {
+    setState({ loading: true, error: null, info: null });
+    const { data, error } = await sb.rpc("claim_next_lead");
+    if (error) { setState({ loading: false, error: error.message }); return; }
+    const lead = Array.isArray(data) ? data[0] : null;
+    if (!lead) {
+      setState({ loading: false, info: "No more leads in queue. Contact manager." });
+      return;
+    }
+    setState({ loading: false });
+    await refreshQueue();
+    openLead(lead);
+  }
+  $("nextLeadBtn").onclick = claimNext;
+
+  document.querySelectorAll(".tabs button").forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+      const tab = Number(b.dataset.tab);
+      if (tab === 2) { window.open(APPLY_CARD_URL, "_blank"); return; }
+      setState({ tab });
+    };
+  });
+
+  // -----------------------------------------------------------------
+  // Lead detail
+  // -----------------------------------------------------------------
+  function openLead(lead) {
+    setState({
+      screen: "detail", selected: lead, error: null, info: null,
+      formStatus: null, formQuality: null, formRemarks: "", formCallbackAt: null,
+      hasCalledThisLead: false, editing: false
+    });
+    // Audit trail — the agent is about to see unmasked PAN/DOB/income.
+    retryRpc("log_lead_view", { p_lead_id: lead.id });
+  }
+  $("detailBackBtn").onclick = () => { setState({ screen: "app", selected: null }); refreshQueue(); };
+
+  function isIOS() { return /iPhone|iPad|iPod/i.test(navigator.userAgent); }
+
+  function onCallTapped() {
+    const lead = state.selected;
+    if (!lead) return;
+    setState({ hasCalledThisLead: true, error: null });
+    retryRpc("log_sms_outcome", { p_lead_id: lead.id, p_mobile: lead.mobile, p_outcome: "call_tel_link_opened" });
+  }
+
+  function onTextApplyCardTapped() {
+    const lead = state.selected;
+    if (!lead) return;
+    // Best-effort proxy for a real outcome: we only know the compose
+    // sheet was opened, not whether the agent actually pressed Send —
+    // unlike SimManager.kt's real broadcast-receiver result on Android,
+    // there is no API to observe that from a web page. Logged as its
+    // own distinct outcome so this never gets mistaken for a confirmed
+    // "sent" in the dashboard's SMS delivery table.
+    retryRpc("log_sms_outcome", { p_lead_id: lead.id, p_mobile: lead.mobile, p_outcome: "web_compose_opened" });
+  }
+
+  function setStatus(wire) {
+    setState({
+      formStatus: wire,
+      formQuality: wire === "LEAD" ? state.formQuality : null,
+      formCallbackAt: wire === "CALL_LATER" ? state.formCallbackAt : null,
+      error: null
+    });
+  }
+  function setQuality(wire) { setState({ formQuality: wire }); }
+  function setRemarks(text) { setState({ formRemarks: text.slice(0, 2000) }); }
+  function setCallbackAt(ms) { setState({ formCallbackAt: ms }); }
+
+  async function saveDisposition() {
+    const lead = state.selected;
+    if (!lead || !state.formStatus) return;
+    if (needsQuality() && !state.formQuality) { setState({ error: "Choose how strong this lead is." }); return; }
+    if (needsCallback() && state.formCallbackAt == null) { setState({ error: "Pick a date and time for the callback." }); return; }
+    if (needsCallback() && state.formCallbackAt <= Date.now()) { setState({ error: "The callback time must be in the future." }); return; }
+
+    setState({ saving: true, error: null });
+    const params = {
+      p_lead_id: lead.id,
+      p_status: state.formStatus
+    };
+    if (state.formQuality) params.p_lead_quality = state.formQuality;
+    if (state.formRemarks.trim()) params.p_remarks = state.formRemarks.trim();
+    if (state.formCallbackAt != null) params.p_callback_at = new Date(state.formCallbackAt).toISOString();
+
+    const { error } = await sb.rpc("save_disposition", params);
+    if (error) { setState({ saving: false, error: error.message }); return; }
+    setState({ saving: false, info: "Saved.", screen: "app", selected: null });
+    refreshQueue();
+  }
+
+  // -----------------------------------------------------------------
+  // Editing customer details
+  // -----------------------------------------------------------------
+  function startEditingDetails() {
+    const lead = state.selected;
+    if (!lead) return;
+    setState({
+      editing: true, error: null,
+      editName: lead.name && lead.name !== UNKNOWN_NAME ? lead.name : "",
+      editEmail: lead.email || "",
+      editDob: lead.dob ? ddmmyyyy(lead.dob) : "",
+      editCompany: lead.company || "",
+      editIncome: lead.annual_income_range || "",
+      editAddress: lead.address || ""
+    });
+  }
+  function cancelEditingDetails() { setState({ editing: false }); }
+  function ddmmyyyy(iso) {
+    const p = iso.split("-");
+    return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : iso;
+  }
+  function isoFromDdMmYyyy(typed) {
+    const m = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(typed.trim());
+    if (!m) return null;
+    const day = +m[1], month = +m[2], year = +m[3];
+    if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900 || year > 2100) return null;
+    const d = new Date(year, month - 1, day);
+    if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  async function saveDetails() {
+    const lead = state.selected;
+    if (!lead) return;
+    let dobIso;
+    if (state.editDob.trim()) {
+      dobIso = isoFromDdMmYyyy(state.editDob);
+      if (!dobIso) { setState({ error: "Date of birth must be DD-MM-YYYY, for example 25-12-1990." }); return; }
+    }
+    if (state.editAddress.length > 2000) { setState({ error: "The address is longer than 2000 characters." }); return; }
+
+    setState({ saving: true, error: null });
+    const params = { p_lead_id: lead.id };
+    if (state.editName.trim()) params.p_name = state.editName.trim();
+    if (state.editEmail.trim()) params.p_email = state.editEmail.trim();
+    if (dobIso) params.p_dob = dobIso;
+    if (state.editCompany.trim()) params.p_company = state.editCompany.trim();
+    if (state.editIncome.trim()) params.p_annual_income_range = state.editIncome.trim();
+    if (state.editAddress.trim()) params.p_address = state.editAddress.trim();
+
+    const { data, error } = await sb.rpc("save_lead_details", params);
+    if (error) { setState({ saving: false, error: error.message }); return; }
+    const updated = Array.isArray(data) ? data[0] : null;
+    if (!updated) { setState({ saving: false, error: "The lead could not be updated." }); return; }
+    setState({
+      saving: false, editing: false, info: "Details saved.", selected: updated,
+      queue: state.queue.map(q => q.id === updated.id ? updated : q)
+    });
+  }
+
+  // -----------------------------------------------------------------
+  // Search — whole-database, mobile or PAN only, read-only. See
+  // backend/16_lead_search.sql: exact match, audit log, rate limit.
+  // -----------------------------------------------------------------
+  const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+
+  $("openSearchBtn").onclick = () => {
+    setState({ screen: "search", searchQuery: "", searchResults: [], searchError: null, searchSelected: null });
+  };
+  $("searchBackBtn").onclick = () => setState({ screen: "app" });
+
+  function performSearch() {
+    const raw = state.searchQuery.trim();
+    const compact = raw.replace(/[ -]/g, "");
+    const digitsOnly = raw.replace(/\D/g, "");
+    const looksLikeMobile = compact.length > 0 && /^[\d+]+$/.test(compact) && digitsOnly.length >= 10;
+
+    const mobile = looksLikeMobile ? digitsOnly.slice(-10) : null;
+    const pan = !looksLikeMobile ? (PAN_RE.test(compact.toUpperCase()) ? compact.toUpperCase() : null) : null;
+
+    if (!mobile && !pan) {
+      setState({ searchError: "Enter a valid 10-digit mobile number or PAN, e.g. ABCDE1234F." });
+      return;
+    }
+    setState({ searching: true, searchError: null, searchResults: [] });
+    const params = {};
+    if (mobile) params.p_mobile = mobile;
+    if (pan) params.p_pan = pan;
+    sb.rpc("search_lead", params).then(({ data, error }) => {
+      if (error) { setState({ searching: false, searchError: error.message }); return; }
+      setState({ searching: false, searchResults: data || [] });
+    });
+  }
+
+  // -----------------------------------------------------------------
+  // Render
+  // -----------------------------------------------------------------
+  function render() {
+    show($("screenLogin"), state.screen === "login");
+    show($("screenApp"), state.screen === "app");
+    show($("screenDetail"), state.screen === "detail");
+    show($("screenSearch"), state.screen === "search");
+
+    if (state.screen === "login") renderLogin();
+    else if (state.screen === "app") renderApp();
+    else if (state.screen === "detail") renderDetail();
+    else if (state.screen === "search") renderSearch();
+  }
+
+  function renderLogin() {
+    $("signInBtn").disabled = state.loading;
+    $("signInBtn").innerHTML = state.loading ? '<span class="spinner"></span>' : "Sign in";
+    $("loginError").innerHTML = state.error
+      ? `<div class="banner-err">${esc(state.error)}</div>` : "";
+  }
+
+  function renderApp() {
+    $("whoami").textContent = state.profile?.full_name || "";
+    document.querySelectorAll(".tabs button").forEach(b => {
+      b.classList.toggle("active", Number(b.dataset.tab) === state.tab);
+    });
+    const callbackLeads = state.queue.filter(l => l.callback_at);
+    const freshLeads = state.queue.filter(l => !l.callback_at);
+    $("cbCount").textContent = callbackLeads.length ? `(${callbackLeads.length})` : "";
+
+    show($("nextLeadBtn"), state.tab !== 2);
+
+    const body = $("queueBody");
+    if (state.tab === 2) { body.innerHTML = ""; return; }
+
+    const banners =
+      (state.error ? `<div class="banner-err">${esc(state.error)}</div>` : "") +
+      (state.info ? `<div class="banner-info">${esc(state.info)}</div>` : "");
+
+    if (state.loading && state.queue.length === 0) {
+      body.innerHTML = banners + `<div class="center-spin"><span class="spinner"></span></div>`;
+      return;
+    }
+
+    if (state.tab === 1) {
+      body.innerHTML = banners + (callbackLeads.length
+        ? callbackLeads.map(leadCardHtml).join("")
+        : `<div class="empty-state">No callbacks pending.</div>`);
+    } else {
+      if (!freshLeads.length) {
+        body.innerHTML = banners + `<div class="empty-state">Nothing assigned to you yet.
+          <div class="hint2">Tap "Next lead" to pull one from the pool.</div></div>`;
+      } else {
+        const lead = freshLeads[0];
+        body.innerHTML = banners +
+          `<div class="queue-hint">Your next lead</div>` +
+          leadCardHtml(lead) +
+          (freshLeads.length > 1
+            ? `<div class="attempts">${freshLeads.length - 1} more waiting — save this one to see the next.</div>`
+            : "");
+      }
+    }
+
+    body.querySelectorAll("[data-open-lead]").forEach(el => {
+      el.onclick = () => {
+        const lead = state.queue.find(l => String(l.id) === el.dataset.openLead);
+        if (lead) openLead(lead);
+      };
+    });
+  }
+
+  function leadCardHtml(lead) {
+    const overdue = lead.callback_at && isPast(lead.callback_at);
+    const meta = statusMeta(lead.last_status);
+    return `<div class="lead-card" data-open-lead="${lead.id}">
+      <div class="body">
+        <div class="name">${esc(lead.name)}</div>
+        ${lead.company ? `<div class="company">${esc(lead.company)}</div>` : ""}
+        <div style="margin-top:8px">
+          <span class="call-pill">📞 Call</span>
+        </div>
+        ${lead.callback_at ? `<div class="cb ${overdue ? "overdue" : "pending"}">
+          🕒 Callback ${esc(formatTimestamp(lead.callback_at))}${overdue ? " · Overdue" : ""}
+        </div>` : ""}
+      </div>
+      <div class="side">
+        ${meta ? `<span class="status-chip" style="background:color-mix(in srgb, ${meta.color} 16%, transparent); color:${meta.color}">${esc(meta.label)}</span>` : ""}
+        ${lead.attempts > 0 ? `<div class="attempts">${lead.attempts} attempt${lead.attempts === 1 ? "" : "s"}</div>` : ""}
+      </div>
+    </div>`;
+  }
+
+  function renderDetail() {
+    const lead = state.selected;
+    if (!lead) return;
+    $("detailTitle").textContent = lead.name;
+
+    const smsHref = `sms:${lead.mobile}${isIOS() ? "&" : "?"}body=${encodeURIComponent(APPLY_CARD_SMS_TEXT)}`;
+
+    let html = `<a class="call-banner" href="tel:${esc(lead.mobile)}" id="callBannerLink">
+      <span class="icon">📞</span>
+      <div>
+        <div class="title">Call</div>
+        <div class="sub">${state.hasCalledThisLead ? "Tap to call again" : "Tap to call"}</div>
+      </div>
+    </a>`;
+
+    if (state.hasCalledThisLead) {
+      html += `<a class="text-apply-btn" href="${smsHref}" id="textApplyBtn">💬 Text the Apply Card link</a>`;
+    }
+
+    html += `<div class="record-card">`;
+    if (state.editing) {
+      html += editFormHtml();
+    } else {
+      html += fieldRow("Name", esc(lead.name));
+      html += fieldRow("Company", esc(lead.company || "—"));
+      html += fieldRow("Email", esc(lead.email || "—"));
+      html += fieldRow("PAN", esc((lead.pan || "—").toUpperCase()));
+      html += fieldRow("DOB", esc(formatDob(lead.dob)));
+      html += fieldRow("Annual Income Range", esc(lead.annual_income_range || "—"));
+      html += fieldRow("ICI Cr Lmt", esc(formatRupees(lead.ici_cr_lmt)), true);
+      html += fieldRow("Address", esc(lead.address || "—"));
+      html += `<div class="edit-link"><button id="editDetailsBtn">Edit details</button></div>`;
+      if (lead.attempts > 0) {
+        html += `<div class="prev-attempts">Previous attempts: ${lead.attempts}` +
+          (lead.last_status ? ` · last outcome ${esc(statusMeta(lead.last_status)?.label || lead.last_status)}` : "") +
+          (lead.last_remarks ? `<div style="margin-top:4px">Last remark: ${esc(lead.last_remarks)}</div>` : "") +
+          `</div>`;
+      }
+    }
+    html += `</div>`;
+
+    if (!state.editing) {
+      html += `<div class="section-label">Call Status</div>`;
+      STATUS_META.forEach(s => {
+        const sel = state.formStatus === s.wire;
+        html += `<div class="status-row ${sel ? "selected" : ""}" data-status="${s.wire}"
+          style="${sel ? `border-color:${s.color}` : ""}">
+          <div class="dot" style="${sel ? `background:${s.color}` : ""}"></div>
+          <div class="label">${esc(s.label)}</div>
+        </div>`;
+      });
+
+      if (needsQuality()) {
+        html += `<div class="section-label">Lead strength</div><div class="chip-row">`;
+        QUALITY_META.forEach(q => {
+          html += `<button class="chip ${state.formQuality === q.wire ? "selected" : ""}" data-quality="${q.wire}">${q.label}</button>`;
+        });
+        html += `</div>`;
+      }
+
+      if (needsCallback()) {
+        html += `<div class="section-label">Call back at</div><div class="chip-row">
+          <button class="chip" data-quick-cb="60">In 1 hr</button>
+          <button class="chip" data-quick-cb="180">In 3 hrs</button>
+          <button class="chip" data-quick-cb="tomorrow">Tomorrow</button>
+        </div>
+        <div class="cb-current">🕒 ${esc(formatEpoch(state.formCallbackAt))}</div>
+        <input type="datetime-local" id="cbCustom" value="${state.formCallbackAt ? toLocalInputValue(state.formCallbackAt) : ""}">`;
+      }
+
+      html += `<div class="section-label">Remarks</div>
+        <div class="field">
+          <textarea id="remarksInput" placeholder="Anything worth recording about this call">${esc(state.formRemarks)}</textarea>
+          <div class="hint">${state.formRemarks.length}/2000</div>
+        </div>`;
+
+      if (state.error) html += `<div class="banner-err">${esc(state.error)}</div>`;
+      if (state.info) html += `<div class="banner-info">${esc(state.info)}</div>`;
+
+      html += `<div class="save-bar">
+        <button class="primary" id="saveOutcomeBtn" ${canSave() ? "" : "disabled"}>
+          ${state.saving ? '<span class="spinner"></span>' : "Save outcome"}
+        </button>
+      </div>`;
+    } else if (state.error) {
+      html += `<div class="banner-err">${esc(state.error)}</div>`;
+    }
+
+    $("detailBody").innerHTML = html;
+    wireDetailEvents();
+  }
+
+  function fieldRow(label, value, emph) {
+    return `<div class="rf-row"><div class="l">${label}</div><div class="v ${emph ? "emph" : ""}">${value}</div></div>`;
+  }
+
+  function editFormHtml() {
+    const s = state;
+    return `<div class="section-label">Edit details</div>
+      <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px">Anything you leave blank stays as it is.</div>
+      <div class="field"><label>Name</label><input id="editName" value="${esc(s.editName)}"></div>
+      <div class="field"><label>Company</label><input id="editCompany" value="${esc(s.editCompany)}"></div>
+      <div class="field"><label>Email</label><input id="editEmail" type="email" value="${esc(s.editEmail)}"></div>
+      <div class="field"><label>Date of birth</label><input id="editDob" placeholder="DD-MM-YYYY" value="${esc(s.editDob)}"></div>
+      <div class="field"><label>Annual income range</label><input id="editIncome" placeholder="10L - 15L" value="${esc(s.editIncome)}"></div>
+      <div class="field"><label>Address</label><textarea id="editAddress" maxlength="2000">${esc(s.editAddress)}</textarea>
+        <div class="hint">${s.editAddress.length}/2000</div></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="secondary" id="cancelEditBtn" ${s.saving ? "disabled" : ""}>Cancel</button>
+        <button class="primary" style="width:auto;padding:10px 18px" id="saveDetailsBtn" ${s.saving ? "disabled" : ""}>
+          ${s.saving ? '<span class="spinner"></span>' : "Save details"}
+        </button>
+      </div>`;
+  }
+
+  function toLocalInputValue(ms) {
+    const d = new Date(ms - new Date().getTimezoneOffset() * 60000);
+    return d.toISOString().slice(0, 16);
+  }
+
+  function wireDetailEvents() {
+    const link = $("callBannerLink");
+    if (link) link.addEventListener("click", onCallTapped);
+    const textBtn = $("textApplyBtn");
+    if (textBtn) textBtn.addEventListener("click", onTextApplyCardTapped);
+
+    const editBtn = $("editDetailsBtn");
+    if (editBtn) editBtn.onclick = startEditingDetails;
+    const cancelBtn = $("cancelEditBtn");
+    if (cancelBtn) cancelBtn.onclick = cancelEditingDetails;
+    const saveDetailsBtn = $("saveDetailsBtn");
+    if (saveDetailsBtn) saveDetailsBtn.onclick = saveDetails;
+    ["editName","editEmail","editDob","editCompany","editIncome","editAddress"].forEach(id => {
+      const el = $(id);
+      if (el) el.oninput = () => { state[id] = el.value; if (id === "editAddress") renderDetail(); };
+    });
+
+    $("detailBody").querySelectorAll("[data-status]").forEach(el => {
+      el.onclick = () => setStatus(el.dataset.status);
+    });
+    $("detailBody").querySelectorAll("[data-quality]").forEach(el => {
+      el.onclick = () => setQuality(el.dataset.quality);
+    });
+    $("detailBody").querySelectorAll("[data-quick-cb]").forEach(el => {
+      el.onclick = () => {
+        const v = el.dataset.quickCb;
+        if (v === "tomorrow") {
+          const d = new Date();
+          d.setDate(d.getDate() + 1);
+          d.setHours(10, 0, 0, 0);
+          setCallbackAt(d.getTime());
+        } else {
+          setCallbackAt(Date.now() + Number(v) * 60000);
+        }
+      };
+    });
+    const cbCustom = $("cbCustom");
+    if (cbCustom) cbCustom.onchange = () => {
+      const ms = new Date(cbCustom.value).getTime();
+      if (!isNaN(ms)) setCallbackAt(ms);
+    };
+    const remarks = $("remarksInput");
+    if (remarks) remarks.oninput = () => { state.formRemarks = remarks.value.slice(0, 2000); renderDetail(); };
+    const saveBtn = $("saveOutcomeBtn");
+    if (saveBtn) saveBtn.onclick = saveDisposition;
+  }
+
+  function renderSearch() {
+    let html = `<div class="search-hint">For a customer calling back whose lead isn't in your queue
+      anymore. Enter their mobile number or PAN — exact match only.</div>
+      <div class="search-row">
+        <input id="searchInput" placeholder="Mobile number or PAN" value="${esc(state.searchQuery)}"
+          autocapitalize="characters" autocomplete="off">
+        <button id="searchGoBtn" ${state.searching ? "disabled" : ""}>🔍</button>
+      </div>`;
+    if (state.searchError) html += `<div class="banner-err">${esc(state.searchError)}</div>`;
+
+    if (state.searching) {
+      html += `<div class="center-spin"><span class="spinner"></span></div>`;
+    } else if (!state.searchResults.length && state.searchQuery.trim() && !state.searchError) {
+      html += `<div class="empty-state">Search to see results here.</div>`;
+    } else {
+      html += state.searchResults.map(l => `
+        <div class="search-card" data-result="${l.id}">
+          <div style="font-weight:700;font-size:15px">${esc(l.name)}</div>
+          ${l.company ? `<div style="color:var(--text-2);font-size:13px">${esc(l.company)}</div>` : ""}
+          <div class="mob">${esc(formatMobileDisplay(l.mobile))}</div>
+          ${l.batch ? `<div style="font-size:11.5px;color:var(--text-muted);margin-top:4px">Batch: ${esc(l.batch)}</div>` : ""}
+        </div>`).join("");
+    }
+
+    $("searchBody").innerHTML = html;
+    $("searchInput").oninput = () => { state.searchQuery = $("searchInput").value; state.searchError = null; };
+    $("searchInput").onkeydown = e => { if (e.key === "Enter") performSearch(); };
+    $("searchGoBtn").onclick = performSearch;
+    $("searchBody").querySelectorAll("[data-result]").forEach(el => {
+      el.onclick = () => {
+        const lead = state.searchResults.find(l => String(l.id) === el.dataset.result);
+        if (lead) showSearchResultModal(lead);
+      };
+    });
+  }
+
+  function formatMobileDisplay(raw) {
+    const digits = String(raw || "").replace(/\D/g, "");
+    if (digits.length === 10) return `${digits.slice(0, 5)} ${digits.slice(5)}`;
+    if (digits.length === 12 && digits.startsWith("91")) return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+    return raw;
+  }
+
+  function showSearchResultModal(lead) {
+    const rows = [
+      ["Mobile", formatMobileDisplay(lead.mobile)],
+      ["Company", lead.company || "—"],
+      ["Email", lead.email || "—"],
+      ["PAN", (lead.pan || "—").toUpperCase()],
+      ["DOB", formatDob(lead.dob)],
+      ["Annual Income Range", lead.annual_income_range || "—"],
+      ["ICI Cr Lmt", formatRupees(lead.ici_cr_lmt)],
+      ["Address", lead.address || "—"]
+    ];
+    if (lead.batch) rows.push(["Batch", lead.batch]);
+    const meta = statusMeta(lead.last_status);
+    if (meta) rows.push(["Last outcome", meta.label]);
+
+    $("modalHost").innerHTML = `<div class="modal-backdrop" id="searchModalBackdrop">
+      <div class="modal-sheet">
+        <h2>${esc(lead.name)}</h2>
+        ${rows.map(([l, v]) => `<div class="rf-row"><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div></div>`).join("")}
+        <div class="close-row"><button class="secondary" id="closeSearchModal">Close</button></div>
+      </div>
+    </div>`;
+    const close = () => { $("modalHost").innerHTML = ""; };
+    $("closeSearchModal").onclick = close;
+    $("searchModalBackdrop").onclick = e => { if (e.target.id === "searchModalBackdrop") close(); };
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
