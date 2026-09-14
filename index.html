@@ -495,6 +495,11 @@
     }
     setState({ loading: false, screen: "app", error: null });
     await loadProfileAndQueue();
+    // Only a fresh credential sign-in, not a boot() that found an
+    // already-valid session — otherwise every reopen would look like a
+    // new login. Fire-and-forget, same as the version report right
+    // after it in loadProfileAndQueue.
+    retryRpc("log_login_event", { p_event: "login", p_platform: "web" });
   };
   $("togglePw").onclick = () => {
     const pw = $("loginPw");
@@ -505,6 +510,12 @@
     $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("signInBtn").click(); }));
 
   $("signOutBtn").onclick = async () => {
+    // Logged before sb.auth.signOut() clears the session — there is no
+    // valid token left to authenticate this call afterward. Awaited so
+    // the request actually goes out on the still-valid session before
+    // signOut() invalidates it, same ordering reasoning as the Android
+    // app's AppViewModel.signOut().
+    await retryRpc("log_login_event", { p_event: "logout", p_platform: "web" });
     await sb.auth.signOut();
     state = { screen: "login", tab: 0, loading: false, saving: false, error: null, info: null,
       profile: null, queue: [], selected: null, hasCalledThisLead: false,
