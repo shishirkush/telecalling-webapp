@@ -81,14 +81,6 @@
 
   main.screen { padding: 14px; padding-bottom: 100px; max-width: 560px; margin: 0 auto; }
 
-  /* ---- device notice ---- */
-  #deviceNotice {
-    background: var(--surface-alt); border-bottom: 1px solid var(--border);
-    padding: 8px 14px; font-size: 12.5px; color: var(--text-2);
-    display: flex; align-items: center; gap: 10px;
-  }
-  #deviceNotice button { background: none; border: none; color: var(--text-muted); font-size: 16px; padding: 2px 6px; }
-
   /* ---- tabs ---- */
   .tabs {
     display: flex; background: var(--surface); border-bottom: 1px solid var(--border);
@@ -253,13 +245,27 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .center-spin { text-align: center; padding: 60px 0; }
   .center-spin .spinner { border-color: rgba(27,77,137,0.25); border-top-color: var(--navy); }
+
+  /* ---- unsupported device (desktop/laptop/tablet) ---- */
+  .unsupported-wrap {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; padding: 32px;
+  }
+  .unsupported-wrap .icon { font-size: 56px; margin-bottom: 18px; }
+  .unsupported-wrap h1 { color: var(--critical); font-size: 20px; margin: 0 0 10px; }
+  .unsupported-wrap p { color: var(--text-2); font-size: 14px; max-width: 360px; margin: 0 auto; }
 </style>
 </head>
 <body>
 
-<div id="deviceNotice" class="hidden">
-  <span>This app is built for a phone. Some things may not work well on a desktop browser.</span>
-  <button id="dismissDeviceNotice">✕</button>
+<!-- =============== UNSUPPORTED DEVICE (desktop / laptop / tablet) =============== -->
+<div id="screenUnsupported" class="hidden">
+  <div class="unsupported-wrap">
+    <div class="icon">📵</div>
+    <h1>This device isn't supported</h1>
+    <p>Telecalling only works on a phone. Open this link on your mobile phone's
+      browser to sign in — a desktop, laptop, or tablet can't be used here.</p>
+  </div>
 </div>
 
 <!-- =============== LOGIN =============== -->
@@ -463,7 +469,16 @@
   }
 
   async function boot() {
-    detectDesktop();
+    if (!isPhone()) {
+      // #screenLogin has no "hidden" class in the markup (it's the
+      // default-visible screen until the first render() runs) — since
+      // this branch returns before ever calling render(), it must be
+      // hidden explicitly or it would show underneath the block screen.
+      show($("screenLogin"), false);
+      show($("screenUnsupported"), true);
+      return; // matches DeviceSupport.kt on Android: nothing else runs —
+              // no sign-in restore, no Supabase call, no login form.
+    }
     const { data } = await sb.auth.getSession();
     if (data && data.session) {
       setState({ screen: "app" });
@@ -580,12 +595,31 @@
     return `Web · ${os} (${browser})`;
   }
 
-  function detectDesktop() {
-    const looksMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
-      (window.innerWidth <= 820 && "ontouchstart" in window);
-    show($("deviceNotice"), !looksMobile);
+  /**
+   * Phone vs. desktop/laptop/tablet. Same limitation as any client-side
+   * check (see DeviceSupport.kt on Android): a determined user could
+   * spoof a UA string; the real security boundary stays Supabase
+   * auth/RLS regardless of device. This exists for the same reason the
+   * Android app blocks desktop Android players — to stop the easy,
+   * everyday case (someone opening this link on a laptop or a tablet
+   * to work from a bigger screen), not to defend against a deliberate
+   * bypass.
+   *
+   * iPadOS 13+ reports itself as "Macintosh" in the UA string (Apple's
+   * own choice, to get desktop-class Safari behavior), so it can't be
+   * told apart from a real Mac by UA alone — `navigator.maxTouchPoints`
+   * is what actually distinguishes them: a Mac has none, an iPad has
+   * several. Android UAs include the literal word "Mobile" for a phone
+   * and typically omit it for a tablet.
+   */
+  function isPhone() {
+    const ua = navigator.userAgent;
+    const isIPadOS = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+    if (/iPad/.test(ua) || isIPadOS) return false;
+    if (/iPhone|iPod/.test(ua)) return true;
+    if (/Android/.test(ua)) return /Mobile/.test(ua);
+    return false; // Windows, Mac (non-touch), Linux/X11, ChromeOS, ...
   }
-  $("dismissDeviceNotice").onclick = () => show($("deviceNotice"), false);
 
   async function refreshQueue() {
     setState({ loading: true, error: null });
