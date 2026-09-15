@@ -510,15 +510,6 @@
     }
     setState({ loading: false, screen: "app", error: null });
     await loadProfileAndQueue();
-    // Only a fresh credential sign-in, not a boot() that found an
-    // already-valid session — otherwise every reopen would look like a
-    // new login. Awaited, unlike the version report in
-    // loadProfileAndQueue: confirmed live that an un-awaited call here
-    // can lose the request entirely if the page navigates away before
-    // the fetch completes (a browser cancels in-flight requests on
-    // navigation — there's no equivalent risk in the Android app, where
-    // a coroutine keeps running independent of screen navigation).
-    await retryRpc("log_login_event", { p_event: "login", p_platform: "web" });
   };
   $("togglePw").onclick = () => {
     const pw = $("loginPw");
@@ -583,6 +574,17 @@
       p_version: WEB_APP_VERSION,
       p_device_model: webDeviceLabel()
     });
+
+    // Same "once per app-active moment" as the version report right
+    // above — deliberately NOT scoped to a fresh credential sign-in
+    // only (it used to be, called from signInBtn's handler). Most
+    // agents sign in once and stay signed in for days; scoping this to
+    // a fresh sign-in left the Login Activity page almost permanently
+    // empty, since a persisted session never re-submits credentials.
+    // Awaited, same reasoning as sign-out: confirmed live once already
+    // that an un-awaited call here can be lost if the page navigates
+    // away before the fetch completes.
+    await retryRpc("log_login_event", { p_event: "login", p_platform: "web" });
   }
 
   function webDeviceLabel() {
