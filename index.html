@@ -400,6 +400,11 @@
     queue: [],
     selected: null,
     hasCalledThisLead: false,
+    // Epoch ms when the server confirmed the call attempt landed — see
+    // backend/23_minimum_call_dwell_time.sql. Null until confirmed; used
+    // only for the client-side countdown hint, the save itself is
+    // enforced server-side regardless of this value.
+    callAttemptConfirmedAt: null,
 
     formStatus: null,
     formQuality: null,
@@ -421,13 +426,23 @@
     render();
   }
 
+  const MIN_CALL_DWELL_MS = 30000; // must match backend/23_minimum_call_dwell_time.sql
+
   function needsQuality() { return state.formStatus === "LEAD"; }
   function needsCallback() { return state.formStatus === "CALL_LATER"; }
+  // Mirrors backend/23_minimum_call_dwell_time.sql's 30-second floor so
+  // the UI doesn't let the agent try to save and bounce off a server
+  // error it already knows is coming.
+  function callDwellMsRemaining() {
+    if (!state.callAttemptConfirmedAt) return -1; // hasn't called yet
+    return Math.max(0, MIN_CALL_DWELL_MS - (Date.now() - state.callAttemptConfirmedAt));
+  }
   function canSave() {
     return !!state.formStatus &&
       (!needsQuality() || !!state.formQuality) &&
       (!needsCallback() || state.formCallbackAt != null) &&
       state.hasCalledThisLead &&
+      callDwellMsRemaining() <= 0 &&
       !state.saving;
   }
 
@@ -529,7 +544,7 @@
     await retryRpc("log_login_event", { p_event: "logout", p_platform: "web" });
     await sb.auth.signOut();
     state = { screen: "login", tab: 0, loading: false, saving: false, error: null, info: null,
-      profile: null, queue: [], selected: null, hasCalledThisLead: false,
+      profile: null, queue: [], selected: null, hasCalledThisLead: false, callAttemptConfirmedAt: null,
       formStatus: null, formQuality: null, formRemarks: "", formCallbackAt: null,
       editing: false, editName: "", editEmail: "", editDob: "", editCompany: "", editIncome: "", editAddress: "",
       searchQuery: "", searching: false, searchError: null, searchResults: [], searchSelected: null };
@@ -674,7 +689,7 @@
     setState({
       screen: "detail", selected: lead, error: null, info: null,
       formStatus: null, formQuality: null, formRemarks: "", formCallbackAt: null,
-      hasCalledThisLead: false, editing: false
+      hasCalledThisLead: false, callAttemptConfirmedAt: null, editing: false
     });
     // Audit trail — the agent is about to see unmasked PAN/DOB/income.
     retryRpc("log_lead_view", { p_lead_id: lead.id });
@@ -689,16 +704,28 @@
     setState({ error: null });
     retryRpc("log_sms_outcome", { p_lead_id: lead.id, p_mobile: lead.mobile, p_outcome: "call_tel_link_opened" });
     // Records the attempt server-side — save_disposition() refuses to
-    // accept an outcome for this lead until this lands (see
-    // backend/22_require_call_before_disposition.sql). hasCalledThisLead
-    // only flips once the server confirms, not optimistically on tap: the
-    // UI must never look like saving is allowed when the server would
-    // still refuse it. A failed log here just leaves the flag false —
-    // tapping Call again retries it. Awaited for the same reason the
-    // login-event call is: an un-awaited fetch can be lost if something
-    // navigates the page away before it completes.
+    // accept an outcome for this lead until this lands, and then not for
+    // another 30 seconds after (see
+    // backend/22_require_call_before_disposition.sql and
+    // backend/23_minimum_call_dwell_time.sql — the dwell floor exists
+    // because log_call_attempt fires the instant Call is tapped, before
+    // the call even rings, so "tap, hang up immediately, save" would
+    // otherwise satisfy the first check exactly as well as a real
+    // unanswered call). hasCalledThisLead only flips once the server
+    // confirms, not optimistically on tap: the UI must never look like
+    // saving is allowed when the server would still refuse it. A failed
+    // log here just leaves the flag false — tapping Call again retries
+    // it. Awaited for the same reason the login-event call is: an
+    // un-awaited fetch can be lost if something navigates the page away
+    // before it completes.
     const { error } = await retryRpc("log_call_attempt", { p_lead_id: lead.id });
-    if (!error && state.selected?.id === lead.id) setState({ hasCalledThisLead: true });
+    if (error || state.selected?.id !== lead.id) return;
+    setState({ hasCalledThisLead: true, callAttemptConfirmedAt: Date.now() });
+    // canSave()/callDwellMsRemaining() are computed from wall-clock time,
+    // so nothing re-evaluates them once the countdown starts unless
+    // something else re-renders — this timeout is that: it exists purely
+    // to re-render once the 30s floor has passed, re-enabling Save.
+    setTimeout(() => { if (state.selected?.id === lead.id) render(); }, MIN_CALL_DWELL_MS);
   }
 
   function onTextApplyCardTapped() {
@@ -1014,13 +1041,19 @@
       if (state.info) html += `<div class="banner-info">${esc(state.info)}</div>`;
 
       html += `<div class="save-bar">`;
-      // The only disabled-Save reason that isn't self-evident from the
-      // form itself (a missing status/quality/callback is obvious just
-      // by looking at those fields) — see
-      // backend/22_require_call_before_disposition.sql.
+      // The only disabled-Save reasons that aren't self-evident from the
+      // form itself (a missing status/quality/callback is obvious just by
+      // looking at those fields) — see
+      // backend/22_require_call_before_disposition.sql and
+      // backend/23_minimum_call_dwell_time.sql. Not a live-ticking
+      // countdown on purpose: onCallTapped()'s single delayed re-render
+      // flips this straight from "waiting" to enabled at the 30s mark.
       if (!state.hasCalledThisLead) {
         html += `<div style="font-size:12.5px;color:var(--text-muted);margin-bottom:8px">
           Call this customer above before you can save an outcome.</div>`;
+      } else if (callDwellMsRemaining() > 0) {
+        html += `<div style="font-size:12.5px;color:var(--text-muted);margin-bottom:8px">
+          Wait a bit longer after calling before you can save.</div>`;
       }
       html += `<button class="primary" id="saveOutcomeBtn" ${canSave() ? "" : "disabled"}>
           ${state.saving ? '<span class="spinner"></span>' : "Save outcome"}
