@@ -348,8 +348,14 @@
 
   // Tags this client's reports distinctly from the Android APK's own
   // version string, so App versions on the dashboard is honest about
-  // which channel an agent is actually on.
-  const WEB_APP_VERSION = "1.9.4-web";
+  // which channel an agent is actually on. BUMP THIS on every change to
+  // this file — unlike android/app/build.gradle.kts's versionName,
+  // nothing enforces it, and it sat stale at "1.9.4-web" through several
+  // real releases (device block, call-attempt gating, the 30s dwell
+  // floor, login-event fixes) before that was noticed from the
+  // dashboard. Doesn't need to match Android's version number, just
+  // needs to change so the dashboard reflects reality.
+  const WEB_APP_VERSION = "1.10.0-web";
 
   // The Apply Card SMS (SimManager.kt's APPLY_CARD_SMS_TEXT on Android)
   // cannot be sent silently from a browser — there is no such API on
