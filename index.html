@@ -427,6 +427,7 @@
     return !!state.formStatus &&
       (!needsQuality() || !!state.formQuality) &&
       (!needsCallback() || state.formCallbackAt != null) &&
+      state.hasCalledThisLead &&
       !state.saving;
   }
 
@@ -542,11 +543,14 @@
   // agent themselves.
   // -----------------------------------------------------------------
   async function retryRpc(name, params, attempts = 3) {
+    let lastError = null;
     for (let i = 0; i < attempts; i++) {
       const { error } = await sb.rpc(name, params);
-      if (!error) return;
+      if (!error) return { error: null };
+      lastError = error;
       if (i < attempts - 1) await new Promise(r => setTimeout(r, 2000));
     }
+    return { error: lastError };
   }
 
   // -----------------------------------------------------------------
@@ -679,11 +683,22 @@
 
   function isIOS() { return /iPhone|iPad|iPod/i.test(navigator.userAgent); }
 
-  function onCallTapped() {
+  async function onCallTapped() {
     const lead = state.selected;
     if (!lead) return;
-    setState({ hasCalledThisLead: true, error: null });
+    setState({ error: null });
     retryRpc("log_sms_outcome", { p_lead_id: lead.id, p_mobile: lead.mobile, p_outcome: "call_tel_link_opened" });
+    // Records the attempt server-side — save_disposition() refuses to
+    // accept an outcome for this lead until this lands (see
+    // backend/22_require_call_before_disposition.sql). hasCalledThisLead
+    // only flips once the server confirms, not optimistically on tap: the
+    // UI must never look like saving is allowed when the server would
+    // still refuse it. A failed log here just leaves the flag false —
+    // tapping Call again retries it. Awaited for the same reason the
+    // login-event call is: an un-awaited fetch can be lost if something
+    // navigates the page away before it completes.
+    const { error } = await retryRpc("log_call_attempt", { p_lead_id: lead.id });
+    if (!error && state.selected?.id === lead.id) setState({ hasCalledThisLead: true });
   }
 
   function onTextApplyCardTapped() {
@@ -998,8 +1013,16 @@
       if (state.error) html += `<div class="banner-err">${esc(state.error)}</div>`;
       if (state.info) html += `<div class="banner-info">${esc(state.info)}</div>`;
 
-      html += `<div class="save-bar">
-        <button class="primary" id="saveOutcomeBtn" ${canSave() ? "" : "disabled"}>
+      html += `<div class="save-bar">`;
+      // The only disabled-Save reason that isn't self-evident from the
+      // form itself (a missing status/quality/callback is obvious just
+      // by looking at those fields) — see
+      // backend/22_require_call_before_disposition.sql.
+      if (!state.hasCalledThisLead) {
+        html += `<div style="font-size:12.5px;color:var(--text-muted);margin-bottom:8px">
+          Call this customer above before you can save an outcome.</div>`;
+      }
+      html += `<button class="primary" id="saveOutcomeBtn" ${canSave() ? "" : "disabled"}>
           ${state.saving ? '<span class="spinner"></span>' : "Save outcome"}
         </button>
       </div>`;
