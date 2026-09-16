@@ -297,6 +297,7 @@
       <div class="who" id="whoami"></div>
     </div>
     <span class="spacer"></span>
+    <button class="icon" id="myNumberBtn" title="My calling number">☎</button>
     <button class="icon" id="openSearchBtn" title="Search customer">🔍</button>
     <button class="icon" id="refreshBtn" title="Refresh">⟳</button>
     <button class="icon" id="signOutBtn" title="Sign out">⎋</button>
@@ -355,7 +356,7 @@
   // floor, login-event fixes) before that was noticed from the
   // dashboard. Doesn't need to match Android's version number, just
   // needs to change so the dashboard reflects reality.
-  const WEB_APP_VERSION = "1.10.0-web";
+  const WEB_APP_VERSION = "1.10.1-web";
 
   // The Apply Card SMS (SimManager.kt's APPLY_CARD_SMS_TEXT on Android)
   // cannot be sent silently from a browser — there is no such API on
@@ -557,6 +558,8 @@
     render();
   };
 
+  $("myNumberBtn").onclick = () => showContactNumberModal();
+
   // -----------------------------------------------------------------
   // Telemetry — retried like LeadRepository.kt's retryRpc: 3 attempts,
   // 2s apart, only for background calls with no UI to retry from. Never
@@ -587,6 +590,12 @@
       setState({ error: "Your account has no profile row. Ask your supervisor to activate it." });
     } else {
       setState({ profile });
+      // Gentle, dismissible nudge, re-offered on every reload until it's
+      // filled in — same reasoning as AppViewModel.kt's own auto-prompt.
+      // See backend/26_agent_contact_number.sql: Android/the browser
+      // can't reliably read a SIM's own number, so this asks once
+      // instead of guessing per call.
+      if (!profile.contact_number) showContactNumberModal();
     }
 
     await refreshQueue();
@@ -1216,6 +1225,51 @@
     const close = () => { $("modalHost").innerHTML = ""; };
     $("closeSearchModal").onclick = close;
     $("searchModalBackdrop").onclick = e => { if (e.target.id === "searchModalBackdrop") close(); };
+  }
+
+  /**
+   * One reliable fact per agent rather than a per-call auto-detect — the
+   * browser can't dependably read a SIM's own number either, so this
+   * asks once instead. See backend/26_agent_contact_number.sql.
+   * Dismissible ("Later"), not a hard gate on working the queue —
+   * loadProfileAndQueue() re-offers it on the next reload if still
+   * blank.
+   */
+  function showContactNumberModal() {
+    const current = state.profile?.contact_number || "";
+    $("modalHost").innerHTML = `<div class="modal-backdrop" id="contactNumberBackdrop">
+      <div class="modal-sheet">
+        <h2>My calling number</h2>
+        <p class="muted">The number you call customers from, so your supervisor can reach you or trace a call back to you.</p>
+        <input type="tel" id="contactNumberInput" value="${esc(current)}" placeholder="Your mobile number" style="width:100%; box-sizing:border-box; margin:8px 0" />
+        <div class="err" id="contactNumberError"></div>
+        <div class="close-row">
+          <button class="secondary" id="contactNumberLater">Later</button>
+          <button id="contactNumberSave">Save</button>
+        </div>
+      </div>
+    </div>`;
+    const close = () => { $("modalHost").innerHTML = ""; };
+    $("contactNumberBackdrop").onclick = e => { if (e.target.id === "contactNumberBackdrop") close(); };
+    $("contactNumberLater").onclick = close;
+    $("contactNumberSave").onclick = async () => {
+      const value = $("contactNumberInput").value.trim();
+      const errEl = $("contactNumberError");
+      if (!value) { errEl.textContent = "Enter your calling number."; return; }
+      const saveBtn = $("contactNumberSave");
+      saveBtn.disabled = true;
+      errEl.textContent = "";
+      const { data, error } = await sb.from("profiles")
+        .update({ contact_number: value }).eq("id", state.profile.id)
+        .select().single();
+      if (error) {
+        errEl.textContent = error.message;
+        saveBtn.disabled = false;
+        return;
+      }
+      setState({ profile: data });
+      close();
+    };
   }
 
   boot();
