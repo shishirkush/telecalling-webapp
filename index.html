@@ -1278,6 +1278,10 @@
     ["RBL Shoprite", "RBL Bank", "rbl-shoprite"]
   ].map(([name, issuer, slug]) => ({ name, issuer, slug }));
 
+  // Shown first in the picker regardless of sitemap order (stable sort keeps the rest as-is).
+  const PINNED_CARD_SLUG = "hdfc-irctc";
+  const pinFirst = cards => [...cards].sort((a, b) => (b.slug === PINNED_CARD_SLUG) - (a.slug === PINNED_CARD_SLUG));
+
   async function loadCardCatalog() {
     try {
       const ctl = new AbortController();
@@ -1307,7 +1311,7 @@
   function showCardPicker() {
     const lead = state.selected;
     if (!lead) return;
-    let cards = CARD_CATALOG;
+    let cards = pinFirst(CARD_CATALOG);
     const selected = new Set();
     const host = $("modalHost");
     const close = () => { host.innerHTML = ""; };
@@ -1361,7 +1365,7 @@
     // Refresh from the live sitemap; keep ticks (by slug) across the re-render.
     loadCardCatalog().then(fresh => {
       if (!$("cardPickerBackdrop")) return;
-      cards = fresh;
+      cards = pinFirst(fresh);
       for (const slug of [...selected]) if (!cards.some(c => c.slug === slug)) selected.delete(slug);
       const sheet = host.querySelector(".modal-sheet");
       const top = sheet ? sheet.scrollTop : 0;
