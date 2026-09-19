@@ -1247,6 +1247,7 @@
   // Android app: names/slugs copied from cardadda.in's own card data, with the
   // live sitemap deciding which pages exist (see loadCardCatalog()).
   const CARD_SITE = "https://www.cardadda.in";
+  const MAX_CARDS = 3; // keeps the WhatsApp message short and focused
   const CARD_CATALOG = [
     ["Flipkart Axis", "Axis Bank", "flipkart-axis"],
     ["Airtel Axis Bank Credit Card", "Axis Bank", "airtel-axis"],
@@ -1329,8 +1330,9 @@
       host.innerHTML = `<div class="modal-backdrop" id="cardPickerBackdrop">
         <div class="modal-sheet">
           <h2>Which cards to send?</h2>
+          <p class="muted" style="margin:-6px 0 8px">Pick up to ${MAX_CARDS}</p>
           ${cards.map(c => `<label class="rf-row" style="display:flex; align-items:center; gap:12px; cursor:pointer">
-            <input type="checkbox" data-slug="${esc(c.slug)}" ${selected.has(c.slug) ? "checked" : ""} />
+            <input type="checkbox" data-slug="${esc(c.slug)}" ${selected.has(c.slug) ? "checked" : ""} ${!selected.has(c.slug) && selected.size >= MAX_CARDS ? "disabled" : ""} />
             <span><div class="v">${esc(c.name)}</div>${c.issuer ? `<div class="l">${esc(c.issuer)}</div>` : ""}</span>
           </label>`).join("")}
           <div class="close-row">
@@ -1350,6 +1352,7 @@
           const send = $("cardPickerSend");
           send.disabled = !selected.size;
           send.textContent = selected.size ? "Send (" + selected.size + ")" : "Send";
+          host.querySelectorAll("input[data-slug]").forEach(b => { b.disabled = !b.checked && selected.size >= MAX_CARDS; });
         };
       });
     };
