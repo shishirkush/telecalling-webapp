@@ -1003,7 +1003,7 @@
       </div>
     </a>`;
 
-    html += `<a class="text-apply-btn" href="https://wa.me/${waNumber(lead.mobile)}" target="_blank" rel="noopener" id="whatsAppBtn">🟢 WhatsApp</a>`;
+    html += `<a class="text-apply-btn" href="#" id="whatsAppBtn">🟢 WhatsApp</a>`;
 
     if (state.hasCalledThisLead) {
       html += `<a class="text-apply-btn" href="${smsHref}" id="textApplyBtn">💬 Text the Apply Card link</a>`;
@@ -1129,6 +1129,8 @@
     if (link) link.addEventListener("click", onCallTapped);
     const textBtn = $("textApplyBtn");
     if (textBtn) textBtn.addEventListener("click", onTextApplyCardTapped);
+    const waBtn = $("whatsAppBtn");
+    if (waBtn) waBtn.addEventListener("click", e => { e.preventDefault(); showCardPicker(); });
 
     const editBtn = $("editDetailsBtn");
     if (editBtn) editBtn.onclick = startEditingDetails;
@@ -1239,6 +1241,131 @@
     const close = () => { $("modalHost").innerHTML = ""; };
     $("closeSearchModal").onclick = close;
     $("searchModalBackdrop").onclick = e => { if (e.target.id === "searchModalBackdrop") close(); };
+  }
+
+  // Card pages an agent can send over WhatsApp. Mirrors CardCatalog.kt in the
+  // Android app: names/slugs copied from cardadda.in's own card data, with the
+  // live sitemap deciding which pages exist (see loadCardCatalog()).
+  const CARD_SITE = "https://www.cardadda.in";
+  const CARD_CATALOG = [
+    ["Flipkart Axis", "Axis Bank", "flipkart-axis"],
+    ["Airtel Axis Bank Credit Card", "Axis Bank", "airtel-axis"],
+    ["IndianOil Axis Bank Credit Card", "Axis Bank", "indianoil-axis"],
+    ["LIC Axis Bank Signature Credit Card", "Axis Bank", "lic-axis-signature"],
+    ["SimplyClick", "SBI Card", "simplyclick"],
+    ["Simply Save", "SBI Card", "simply-save"],
+    ["SBI Card PRIME", "SBI Card", "sbi-card-prime"],
+    ["SBI Card ELITE", "SBI Card", "sbi-card-elite"],
+    ["HDFC Bank Pixel Go", "HDFC Bank", "hdfc-pixel-go"],
+    ["HDFC Bank Pixel Play", "HDFC Bank", "hdfc-pixel-play"],
+    ["Marriott Bonvoy", "HDFC Bank", "marriott-bonvoy"],
+    ["Tata Neu Plus", "HDFC Bank", "tata-neu-plus"],
+    ["Tata Neu Infinity", "HDFC Bank", "tata-neu-infinity"],
+    ["HDFC Bank IRCTC", "HDFC Bank", "hdfc-irctc"],
+    ["Legend", "IndusInd", "legend"],
+    ["AU Altura+", "AU Small Finance Bank", "au-altura-plus"],
+    ["AU Vetta", "AU Small Finance Bank", "au-vetta"],
+    ["FIRST Millennia", "IDFC First", "first-millennia"],
+    ["Select", "IDFC First", "select"],
+    ["First Wealth", "IDFC First", "first-wealth"],
+    ["BOBCARD Uni GoldX", "Bank of Baroda", "bobcard-uni-goldx"],
+    ["YES Bank POP-Club", "YES Bank", "yes-bank-pop-club"],
+    ["YES Bank Wellness", "YES Bank", "yes-bank-wellness"],
+    ["YES Bank ACE", "YES Bank", "yes-bank-ace"],
+    ["Scapia Federal Bank Credit Card", "Federal Bank", "scapia-federal-bank"],
+    ["Jupiter Edge+", "CSB Bank", "jupiter-edge-plus"],
+    ["RBL Shoprite", "RBL Bank", "rbl-shoprite"]
+  ].map(([name, issuer, slug]) => ({ name, issuer, slug }));
+
+  async function loadCardCatalog() {
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 5000);
+      const res = await fetch(CARD_SITE + "/sitemap.xml", { signal: ctl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return CARD_CATALOG;
+      const xml = await res.text();
+      const live = [...xml.matchAll(/\/cards\/([a-z0-9-]+)<\/loc>/g)].map(m => m[1]);
+      if (!live.length) return CARD_CATALOG;
+      const known = new Map(CARD_CATALOG.map(c => [c.slug, c]));
+      return live.map(slug => known.get(slug) || {
+        name: slug.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+        issuer: "", slug
+      });
+    } catch (e) {
+      return CARD_CATALOG;
+    }
+  }
+
+  /**
+   * The agent ticks whichever card pages fit the conversation; only those
+   * links go into the WhatsApp message, which they can still edit before
+   * sending. "Chat only" skips the links. Mirrors CardPickerDialog in the
+   * Android app.
+   */
+  function showCardPicker() {
+    const lead = state.selected;
+    if (!lead) return;
+    let cards = CARD_CATALOG;
+    const selected = new Set();
+    const host = $("modalHost");
+    const close = () => { host.innerHTML = ""; };
+
+    const openChat = chosen => {
+      let url = "https://wa.me/" + waNumber(lead.mobile);
+      if (chosen.length) {
+        const hasName = lead.name && lead.name.trim() && lead.name !== UNKNOWN_NAME;
+        const greeting = hasName ? "Hi " + lead.name.trim().split(/\s+/)[0] : "Hi";
+        const text = greeting + ", as discussed, here " +
+          (chosen.length === 1 ? "is the card page:" : "are the card pages:") +
+          chosen.map(c => "\n\n" + c.name + "\n" + CARD_SITE + "/cards/" + c.slug).join("");
+        url += "?text=" + encodeURIComponent(text);
+      }
+      close();
+      window.open(url, "_blank", "noopener");
+    };
+
+    const render = () => {
+      host.innerHTML = `<div class="modal-backdrop" id="cardPickerBackdrop">
+        <div class="modal-sheet">
+          <h2>Which cards to send?</h2>
+          ${cards.map(c => `<label class="rf-row" style="display:flex; align-items:center; gap:12px; cursor:pointer">
+            <input type="checkbox" data-slug="${esc(c.slug)}" ${selected.has(c.slug) ? "checked" : ""} />
+            <span><div class="v">${esc(c.name)}</div>${c.issuer ? `<div class="l">${esc(c.issuer)}</div>` : ""}</span>
+          </label>`).join("")}
+          <div class="close-row">
+            <button class="secondary" id="cardPickerCancel">Cancel</button>
+            <button class="secondary" id="cardPickerChatOnly">Chat only</button>
+            <button id="cardPickerSend" ${selected.size ? "" : "disabled"}>${selected.size ? "Send (" + selected.size + ")" : "Send"}</button>
+          </div>
+        </div>
+      </div>`;
+      $("cardPickerBackdrop").onclick = e => { if (e.target.id === "cardPickerBackdrop") close(); };
+      $("cardPickerCancel").onclick = close;
+      $("cardPickerChatOnly").onclick = () => openChat([]);
+      $("cardPickerSend").onclick = () => openChat(cards.filter(c => selected.has(c.slug)));
+      host.querySelectorAll("input[data-slug]").forEach(box => {
+        box.onchange = () => {
+          if (box.checked) selected.add(box.dataset.slug); else selected.delete(box.dataset.slug);
+          const send = $("cardPickerSend");
+          send.disabled = !selected.size;
+          send.textContent = selected.size ? "Send (" + selected.size + ")" : "Send";
+        };
+      });
+    };
+
+    render();
+    // Refresh from the live sitemap; keep ticks (by slug) across the re-render.
+    loadCardCatalog().then(fresh => {
+      if (!$("cardPickerBackdrop")) return;
+      cards = fresh;
+      for (const slug of [...selected]) if (!cards.some(c => c.slug === slug)) selected.delete(slug);
+      const sheet = host.querySelector(".modal-sheet");
+      const top = sheet ? sheet.scrollTop : 0;
+      render();
+      const again = host.querySelector(".modal-sheet");
+      if (again) again.scrollTop = top;
+    });
   }
 
   /**
