@@ -368,6 +368,18 @@
 
   const UNKNOWN_NAME = "Name not provided"; // must match AppViewModel.kt / dashboard/index.html
 
+  // wa.me needs full international digits: no "+", spaces or leading zero.
+  // Mirrors waNumber() in the Android app's Format.kt — a bare 10-digit
+  // Indian number gets 91 in front, one already carrying a country code is
+  // left alone. Unlike the Android app this can't save the lead into
+  // Contacts (a browser has no access to the phone's address book).
+  function waNumber(raw) {
+    const d = String(raw || "").replace(/\D/g, "");
+    if (d.length === 10) return "91" + d;
+    if (d.length === 11 && d.startsWith("0")) return "91" + d.slice(1);
+    return d;
+  }
+
   const STATUS_META = [
     { wire: "SWITCHED_OFF",   label: "Switched Off",   color: "var(--s-switched-off)" },
     { wire: "NO_ANSWER",      label: "No Answer",      color: "var(--s-no-answer)" },
@@ -990,6 +1002,8 @@
         <div class="sub">${state.hasCalledThisLead ? "Tap to call again" : "Tap to call"}</div>
       </div>
     </a>`;
+
+    html += `<a class="text-apply-btn" href="https://wa.me/${waNumber(lead.mobile)}" target="_blank" rel="noopener" id="whatsAppBtn">🟢 WhatsApp</a>`;
 
     if (state.hasCalledThisLead) {
       html += `<a class="text-apply-btn" href="${smsHref}" id="textApplyBtn">💬 Text the Apply Card link</a>`;
