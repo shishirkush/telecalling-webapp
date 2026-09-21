@@ -356,7 +356,7 @@
   // floor, login-event fixes) before that was noticed from the
   // dashboard. Doesn't need to match Android's version number, just
   // needs to change so the dashboard reflects reality.
-  const WEB_APP_VERSION = "1.10.7-web";
+  const WEB_APP_VERSION = "1.10.8-web";
 
   // The Apply Card SMS (SimManager.kt's APPLY_CARD_SMS_TEXT on Android)
   // cannot be sent silently from a browser — there is no such API on
@@ -532,7 +532,7 @@
   }
 
   async function signOutReplaced() {
-    await retryRpc("log_login_event", { p_event: "logout", p_platform: "web" });
+    await logLoginEvent("logout");
     await sb.auth.signOut();
     setLocalSessionToken(null);
     state = { screen: "login", tab: 0, loading: false, saving: false,
@@ -560,6 +560,9 @@
     if (data && data.session) {
       setState({ screen: "app" });
       await loadProfileAndQueue();
+      // Awaited, same reasoning as sign-out: an un-awaited call can be lost
+      // if the page navigates away before the fetch completes.
+      await logAppOpenedIfDue();
     } else {
       setState({ screen: "login" });
     }
@@ -592,6 +595,8 @@
     await claimSession();
     setState({ loading: false, screen: "app", error: null });
     await loadProfileAndQueue();
+    // A real password sign-in — the only thing "login" means.
+    await logLoginEvent("login");
   };
   $("togglePw").onclick = () => {
     const pw = $("loginPw");
@@ -607,7 +612,7 @@
     // the request actually goes out on the still-valid session before
     // signOut() invalidates it, same ordering reasoning as the Android
     // app's AppViewModel.signOut().
-    await retryRpc("log_login_event", { p_event: "logout", p_platform: "web" });
+    await logLoginEvent("logout");
     await sb.auth.signOut();
     setLocalSessionToken(null);
     state = { screen: "login", tab: 0, loading: false, saving: false, error: null, info: null,
@@ -635,6 +640,27 @@
       if (i < attempts - 1) await new Promise(r => setTimeout(r, 2000));
     }
     return { error: lastError };
+  }
+
+  // Login-log events. "login" = a real password sign-in, "logout" = sign-out,
+  // "app_opened" = the page reopened with a saved session — logged only if
+  // 30 minutes have passed since this browser last logged any event, so a
+  // day of reloads stays a handful of rows. Mirrors LeadRepository.kt's
+  // logLoginEvent()/logAppOpenedIfDue(); see backend/28_app_opened_login_event.sql.
+  const LAST_LOGIN_LOG_KEY = "telecall_last_login_log_at";
+  const APP_OPENED_MIN_GAP_MS = 30 * 60 * 1000;
+
+  async function logLoginEvent(event) {
+    const { error } = await retryRpc("log_login_event", { p_event: event, p_platform: "web" });
+    // Only a recorded event moves the throttle clock.
+    if (!error) { try { localStorage.setItem(LAST_LOGIN_LOG_KEY, String(Date.now())); } catch (e) {} }
+  }
+
+  async function logAppOpenedIfDue() {
+    let last = 0;
+    try { last = Number(localStorage.getItem(LAST_LOGIN_LOG_KEY)) || 0; } catch (e) {}
+    if (Date.now() - last < APP_OPENED_MIN_GAP_MS) return;
+    await logLoginEvent("app_opened");
   }
 
   // -----------------------------------------------------------------
@@ -677,16 +703,10 @@
       p_device_model: webDeviceLabel()
     });
 
-    // Same "once per app-active moment" as the version report right
-    // above — deliberately NOT scoped to a fresh credential sign-in
-    // only (it used to be, called from signInBtn's handler). Most
-    // agents sign in once and stay signed in for days; scoping this to
-    // a fresh sign-in left the Login Activity page almost permanently
-    // empty, since a persisted session never re-submits credentials.
-    // Awaited, same reasoning as sign-out: confirmed live once already
-    // that an un-awaited call here can be lost if the page navigates
-    // away before the fetch completes.
-    await retryRpc("log_login_event", { p_event: "login", p_platform: "web" });
+    // No login-log row here any more: "login" is written by the sign-in
+    // handler for a real password sign-in, and reopening the page with a
+    // saved session is a throttled "app_opened" from boot() — see
+    // logAppOpenedIfDue() and backend/28_app_opened_login_event.sql.
   }
 
   function webDeviceLabel() {
