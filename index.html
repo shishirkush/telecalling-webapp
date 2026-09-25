@@ -788,12 +788,34 @@
   // -----------------------------------------------------------------
   // Lead detail
   // -----------------------------------------------------------------
-  function openLead(lead) {
+
+  // Both log_call_attempt() and save_disposition() raise this exact text
+  // when the lead they're pointed at isn't (or no longer is) assigned to
+  // the caller — stale local state is the normal way to hit it (a queue
+  // card from before a refresh, another tab that already disposed the
+  // same lead), not a real data problem. Bounce back to a fresh queue
+  // instead of leaving the agent on a dead form with a raw RPC error.
+  function isNotAssignedError(msg) {
+    return typeof msg === "string" && msg.includes("is not assigned to you");
+  }
+  function bounceStaleLead() {
+    setState({ screen: "app", selected: null, error: null, info: "That lead was already handled elsewhere. Refreshed your queue." });
+    refreshQueue();
+  }
+
+  async function openLead(lead) {
     setState({
       screen: "detail", selected: lead, error: null, info: null,
       formStatus: null, formQuality: null, formRemarks: "", formCallbackAt: null,
       hasCalledThisLead: false, callAttemptConfirmedAt: null, editing: false
     });
+    // The queue card that triggered this can be stale — another tab or
+    // an earlier action may have already disposed this same lead. Re-check
+    // before the agent invests a call and a filled-out form into a lead
+    // that silently isn't theirs anymore (see bounceStaleLead()).
+    const { data, error } = await sb.from("leads").select("assigned_to").eq("id", lead.id).single();
+    if (state.selected?.id !== lead.id) return; // navigated elsewhere already
+    if (error || !data || data.assigned_to !== state.profile?.id) { bounceStaleLead(); return; }
     // Audit trail — the agent is about to see unmasked PAN/DOB/income.
     retryRpc("log_lead_view", { p_lead_id: lead.id });
   }
@@ -822,7 +844,12 @@
     // un-awaited fetch can be lost if something navigates the page away
     // before it completes.
     const { error } = await retryRpc("log_call_attempt", { p_lead_id: lead.id });
-    if (error || state.selected?.id !== lead.id) return;
+    if (state.selected?.id !== lead.id) return;
+    if (error) {
+      if (isNotAssignedError(error.message)) { bounceStaleLead(); return; }
+      setState({ error: error.message });
+      return;
+    }
     setState({ hasCalledThisLead: true, callAttemptConfirmedAt: Date.now() });
     // canSave()/callDwellMsRemaining() are computed from wall-clock time,
     // so nothing re-evaluates them once the countdown starts unless
@@ -872,7 +899,12 @@
     if (state.formCallbackAt != null) params.p_callback_at = new Date(state.formCallbackAt).toISOString();
 
     const { error } = await sb.rpc("save_disposition", params);
-    if (error) { setState({ saving: false, error: error.message }); return; }
+    if (error) {
+      setState({ saving: false });
+      if (isNotAssignedError(error.message)) { bounceStaleLead(); return; }
+      setState({ error: error.message });
+      return;
+    }
     setState({ saving: false, info: "Saved.", screen: "app", selected: null });
     refreshQueue();
   }
@@ -928,7 +960,12 @@
     if (state.editAddress.trim()) params.p_address = state.editAddress.trim();
 
     const { data, error } = await sb.rpc("save_lead_details", params);
-    if (error) { setState({ saving: false, error: error.message }); return; }
+    if (error) {
+      setState({ saving: false });
+      if (isNotAssignedError(error.message)) { bounceStaleLead(); return; }
+      setState({ error: error.message });
+      return;
+    }
     const updated = Array.isArray(data) ? data[0] : null;
     if (!updated) { setState({ saving: false, error: "The lead could not be updated." }); return; }
     setState({
