@@ -299,6 +299,7 @@
     <span class="spacer"></span>
     <button class="icon" id="myNumberBtn" title="My calling number">☎</button>
     <button class="icon" id="openSearchBtn" title="Search customer">🔍</button>
+    <button class="icon" id="openCampaignBtn" title="Switch campaign">🗂</button>
     <button class="icon" id="refreshBtn" title="Refresh">⟳</button>
     <button class="icon" id="signOutBtn" title="Sign out">⎋</button>
   </header>
@@ -327,6 +328,15 @@
     <h1>Search customer</h1>
   </header>
   <main class="screen" id="searchBody"></main>
+</div>
+
+<!-- =============== CAMPAIGN PICKER =============== -->
+<div id="screenCampaign" class="hidden">
+  <header class="bar">
+    <button class="icon back hidden" id="campaignBackBtn">←</button>
+    <h1>Pick a campaign</h1>
+  </header>
+  <main class="screen" id="campaignBody"></main>
 </div>
 
 <div id="modalHost"></div>
@@ -408,7 +418,7 @@
   // who knows the Android app can find their way around this file.
   // -----------------------------------------------------------------
   let state = {
-    screen: "login",           // login | app | detail | search
+    screen: "login",           // login | app | detail | search | campaign
     tab: 0,                    // 0 Queue, 1 CallBacks, 2 Apply Card
     loading: false,
     saving: false,
@@ -416,6 +426,9 @@
     info: null,
 
     profile: null,
+    campaigns: [],
+    switchingCampaign: false,
+    campaignError: null,
     queue: [],
     selected: null,
     hasCalledThisLead: false,
@@ -690,6 +703,10 @@
       // can't reliably read a SIM's own number, so this asks once
       // instead of guessing per call.
       if (!profile.contact_number) showContactNumberModal();
+      // No campaign picked yet (backend/32_campaigns.sql) — claim_next_lead()
+      // will refuse until one is, so send them here first rather than let
+      // them discover that from an RPC error on their first "Next lead" tap.
+      if (!profile.current_campaign_id) { await openCampaignPicker(); return; }
     }
 
     await refreshQueue();
@@ -1009,6 +1026,60 @@
   }
 
   // -----------------------------------------------------------------
+  // Campaigns — an agent works one at a time (profiles.current_
+  // campaign_id, backend/32_campaigns.sql); this is the only place that
+  // value ever changes, always through switch_campaign(), never a raw
+  // profiles write. Opened either because loadProfileAndQueue() found no
+  // campaign picked yet (no back button — there's nowhere to go back to)
+  // or via the header button to switch later (back button shown).
+  // -----------------------------------------------------------------
+  async function openCampaignPicker() {
+    setState({ screen: "campaign", campaignError: null });
+    show($("campaignBackBtn"), !!state.profile?.current_campaign_id);
+    const { data, error } = await sb.from("campaigns")
+      .select("*").eq("is_active", true).order("name");
+    if (error) { setState({ campaignError: error.message }); return; }
+    setState({ campaigns: data || [] });
+  }
+
+  async function selectCampaign(campaignId) {
+    if (state.switchingCampaign) return;
+    setState({ switchingCampaign: true, campaignError: null });
+    const { error } = await sb.rpc("switch_campaign", { p_campaign_id: campaignId });
+    if (error) { setState({ switchingCampaign: false, campaignError: error.message }); return; }
+    setState({
+      switchingCampaign: false,
+      screen: "app",
+      profile: { ...state.profile, current_campaign_id: campaignId }
+    });
+    refreshQueue();
+  }
+
+  function renderCampaign() {
+    let html = "";
+    if (!state.profile?.current_campaign_id) {
+      html += `<p class="muted">Pick a campaign to see your queue.</p>`;
+    }
+    if (state.campaignError) html += `<div class="banner-err">${esc(state.campaignError)}</div>`;
+    html += state.campaigns.length
+      ? state.campaigns.map(c => `
+        <div class="lead-card" data-campaign="${c.id}" style="cursor:pointer">
+          <div class="body">
+            <div class="name">${esc(c.name)}</div>
+            ${c.id === state.profile?.current_campaign_id ? '<div class="cb pending">Current</div>' : ""}
+          </div>
+        </div>`).join("")
+      : `<div class="empty-state">No active campaigns yet. Ask your supervisor.</div>`;
+    $("campaignBody").innerHTML = html;
+    $("campaignBody").querySelectorAll("[data-campaign]").forEach(el => {
+      el.onclick = () => selectCampaign(Number(el.dataset.campaign));
+    });
+  }
+
+  $("openCampaignBtn").onclick = openCampaignPicker;
+  $("campaignBackBtn").onclick = () => setState({ screen: "app" });
+
+  // -----------------------------------------------------------------
   // Render
   // -----------------------------------------------------------------
   function render() {
@@ -1016,11 +1087,13 @@
     show($("screenApp"), state.screen === "app");
     show($("screenDetail"), state.screen === "detail");
     show($("screenSearch"), state.screen === "search");
+    show($("screenCampaign"), state.screen === "campaign");
 
     if (state.screen === "login") renderLogin();
     else if (state.screen === "app") renderApp();
     else if (state.screen === "detail") renderDetail();
     else if (state.screen === "search") renderSearch();
+    else if (state.screen === "campaign") renderCampaign();
   }
 
   function renderLogin() {
