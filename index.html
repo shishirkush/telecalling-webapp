@@ -1429,45 +1429,159 @@
     $("searchModalBackdrop").onclick = e => { if (e.target.id === "searchModalBackdrop") close(); };
   }
 
-  // Card pages an agent can send over WhatsApp. Mirrors CardCatalog.kt in the
-  // Android app: names/slugs copied from cardadda.in's own card data, with the
-  // live sitemap deciding which pages exist (see loadCardCatalog()).
+  // Card pages an agent can send over WhatsApp. Deliberately a short,
+  // curated list (not all of cardadda.in) — each entry's pitch below is
+  // hand-verified against that card's own live page, and every fact must
+  // trace back to that page (never cross-copied from a sibling card).
   const CARD_SITE = "https://www.cardadda.in";
   const MAX_CARDS = 3; // keeps the WhatsApp message short and focused
   const CARD_CATALOG = [
+    ["HDFC Bank Pixel Play", "HDFC Bank", "hdfc-pixel-play"],
     ["Flipkart Axis", "Axis Bank", "flipkart-axis"],
-    ["Airtel Axis Bank Credit Card", "Axis Bank", "airtel-axis"],
-    ["IndianOil Axis Bank Credit Card", "Axis Bank", "indianoil-axis"],
+    ["Axis Bank Neo Credit Card", "Axis Bank", "axis-neo"],
     ["LIC Axis Bank Signature Credit Card", "Axis Bank", "lic-axis-signature"],
     ["SimplyClick", "SBI Card", "simplyclick"],
     ["Simply Save", "SBI Card", "simply-save"],
-    ["SBI Card PRIME", "SBI Card", "sbi-card-prime"],
-    ["SBI Card ELITE", "SBI Card", "sbi-card-elite"],
-    ["HDFC Bank Pixel Go", "HDFC Bank", "hdfc-pixel-go"],
-    ["HDFC Bank Pixel Play", "HDFC Bank", "hdfc-pixel-play"],
-    ["Marriott Bonvoy", "HDFC Bank", "marriott-bonvoy"],
-    ["Tata Neu Plus", "HDFC Bank", "tata-neu-plus"],
-    ["Tata Neu Infinity", "HDFC Bank", "tata-neu-infinity"],
     ["HDFC Bank IRCTC", "HDFC Bank", "hdfc-irctc"],
+    ["HDFC Bank Millennia", "HDFC Bank", "hdfc-millennia"],
+    ["Tata Neu Plus", "HDFC Bank", "tata-neu-plus"],
     ["Legend", "IndusInd", "legend"],
-    ["AU Altura+", "AU Small Finance Bank", "au-altura-plus"],
-    ["AU Vetta", "AU Small Finance Bank", "au-vetta"],
     ["FIRST Millennia", "IDFC First", "first-millennia"],
-    ["Select", "IDFC First", "select"],
-    ["First Wealth", "IDFC First", "first-wealth"],
-    ["BOBCARD Uni GoldX", "Bank of Baroda", "bobcard-uni-goldx"],
-    ["YES Bank POP-Club", "YES Bank", "yes-bank-pop-club"],
-    ["YES Bank Wellness", "YES Bank", "yes-bank-wellness"],
-    ["YES Bank ACE", "YES Bank", "yes-bank-ace"],
-    ["Scapia Federal Bank Credit Card", "Federal Bank", "scapia-federal-bank"],
-    ["Jupiter Edge+", "CSB Bank", "jupiter-edge-plus"],
-    ["RBL Shoprite", "RBL Bank", "rbl-shoprite"]
+    ["YES Bank POP-Club", "YES Bank", "yes-bank-pop-club"]
   ].map(([name, issuer, slug]) => ({ name, issuer, slug }));
 
+  // Bulleted WhatsApp pitch per card — every bullet sourced from that
+  // card's own cardadda.in page (verified 9 Sep 2026). A card missing from
+  // this map (shouldn't happen for anything in CARD_CATALOG above) just
+  // falls back to a plain name + link line in cardBlock() below.
+  const CARD_PITCHES = {
+    "hdfc-pixel-play": {
+      title: "HDFC Bank Pixel Play — ₹500 + GST/yr",
+      bullets: [
+        "💳 5% cashback on any 2 spend packs of your choice (BookMyShow+Zomato, MakeMyTrip+Uber, Blinkit+Reliance Smart Bazaar, Electronics or Fashion)",
+        "🛒 3% cashback on Amazon, Flipkart or PayZapp",
+        "📱 1% cashback on UPI spends (RuPay variant)",
+        "🎨 \"Build Your Own Card\" — pick your billing date, partners & card colour",
+        "✅ FD-backed variant available, no income proof needed"
+      ]
+    },
+    "flipkart-axis": {
+      title: "Flipkart Axis — ₹0 joining (limited-period offer)",
+      bullets: [
+        "🛍️ 7.5% cashback on Myntra, capped at ₹4,000/quarter",
+        "📦 5% cashback on Flipkart & Cleartrip",
+        "💰 4% on other preferred merchants, 1% on everything else",
+        "⛽ 1% fuel surcharge waiver",
+        "🎁 ₹350 welcome benefit + EMI on Flipkart purchases over ₹2,500"
+      ]
+    },
+    "axis-neo": {
+      title: "Axis Bank Neo — ₹0 joining (select channels, currently)",
+      bullets: [
+        "🍔 Flat ₹120 off on Zomato (code AXISNEO, ₹499+ orders, twice a month)",
+        "🛒 10% off on Blinkit, up to ₹250 (₹750+ orders, once a month)",
+        "📱 5% off mobile recharge, broadband & DTH via Paytm",
+        "✈️ 7% off Cleartrip flights, 18% off Cleartrip hotels, monthly",
+        "🎁 100% cashback up to ₹300 on your first utility bill payment"
+      ]
+    },
+    "lic-axis-signature": {
+      title: "LIC Axis Bank Signature — ₹0 for life",
+      bullets: [
+        "💯 Lifetime free — ₹0, forever",
+        "🎯 1 Reward Point per ₹100 on all spends, 2X on LIC premiums & forex",
+        "🎁 100% cashback up to ₹300 on your first utility bill payment",
+        "🛫 8 complimentary domestic lounge visits a year",
+        "🛡️ Lost-card liability cover up to your full credit limit"
+      ]
+    },
+    "simplyclick": {
+      title: "SBI SimplyClick — ₹499 + GST/yr",
+      bullets: [
+        "🛒 10X Reward Points across 11 partners (Myntra, Swiggy, BookMyShow, Netmeds & more)",
+        "💻 5X Reward Points on other online spends",
+        "🎁 ₹500 Amazon voucher on paying the annual fee",
+        "🎫 ₹2,000 Cleartrip/Yatra voucher at ₹1L & ₹2L annual online spend",
+        "⛽ 1% fuel surcharge waiver"
+      ]
+    },
+    "simply-save": {
+      title: "SBI Simply Save — ₹499 + GST/yr",
+      bullets: [
+        "🍽️ 10 Reward Points per ₹150 on dining, groceries, movies & department stores",
+        "🎁 2,000 bonus points (~₹500) on ₹2,000 spend within the first 60 days",
+        "⛽ 1% fuel surcharge waiver"
+      ]
+    },
+    "hdfc-irctc": {
+      title: "HDFC Bank IRCTC — Lifetime free right now",
+      bullets: [
+        "✅ ₹0 annual fee (limited-period offer)",
+        "🚆 5 Reward Points per ₹100 on IRCTC ticketing website & Rail Connect App bookings",
+        "💰 Extra 5% cashback on train bookings via HDFC Bank SmartBuy",
+        "🎟️ IRCTC executive lounge access",
+        "🎁 ₹500 gift voucher on activation, plus ₹500 every quarter on ₹30,000+ spend",
+        "⚡ 1% transaction-charge waiver on IRCTC bookings"
+      ]
+    },
+    "hdfc-millennia": {
+      title: "HDFC Bank Millennia — ₹1,000 + GST/yr",
+      bullets: [
+        "🛍️ 5% cashback on Amazon, Flipkart, Myntra, Swiggy, Zomato, Uber, BookMyShow & more",
+        "💳 1% cashback on all other spends",
+        "🎁 ₹1,000 voucher OR 1 lounge visit per quarter on ₹1L+ quarterly spend (up to 4/year)",
+        "🛒 Up to 10% extra cashback across 200+ brands via SmartBuy/PayZapp",
+        "⛽ 1% fuel surcharge waiver"
+      ]
+    },
+    "tata-neu-plus": {
+      title: "Tata Neu Plus — ₹499 + GST/yr",
+      bullets: [
+        "🛍️ 2% NeuCoins on Tata Neu & partner Tata Brand spends",
+        "📱 Up to 1% back on UPI via your Tata Neu UPI ID",
+        "🎁 499 NeuCoins welcome benefit on your first transaction",
+        "🛫 A complimentary domestic lounge voucher every quarter (up to 4/year) on ₹50,000+ spend"
+      ]
+    },
+    "legend": {
+      title: "IndusInd Legend — ₹0 right now, no renewal fee",
+      bullets: [
+        "💯 Lifetime free — ₹0 renewal, ever",
+        "🎯 1 Reward Point per ₹100 on weekdays, 2X on weekends",
+        "🎬 One free BookMyShow movie ticket every month, up to ₹200",
+        "🌍 1.8% discounted forex mark-up on international spends",
+        "🛡️ \"Total Protect\" cover against unauthorised/counterfeit fraud"
+      ]
+    },
+    "first-millennia": {
+      title: "IDFC FIRST Millennia — ₹0 for life",
+      bullets: [
+        "💯 Lifetime free — ₹0, forever",
+        "🍽️ 10X Reward Points on dining, travel and your birthday",
+        "🌍 Zero forex mark-up on international spends",
+        "🎁 ₹1,500 in welcome benefits",
+        "🚂 4 complimentary railway lounge visits a quarter"
+      ]
+    },
+    "yes-bank-pop-club": {
+      title: "YES Bank POP-Club — ₹0 right now (Lifetime Free offer)",
+      bullets: [
+        "💻 10 POPcoins per ₹100 spent online, 2 per ₹100 on everything else",
+        "💰 POPcoins redeem at up to ₹1 each",
+        "⛽ 1% fuel surcharge waiver",
+        "🛍️ Partner rewards at Blinkit, Rapido, Zomato, cult.fit & more"
+      ]
+    }
+  };
+
   // Shown first in the picker regardless of sitemap order (stable sort keeps the rest as-is).
-  const PINNED_CARD_SLUG = "hdfc-irctc";
+  const PINNED_CARD_SLUG = "hdfc-pixel-play";
   const pinFirst = cards => [...cards].sort((a, b) => (b.slug === PINNED_CARD_SLUG) - (a.slug === PINNED_CARD_SLUG));
 
+  // Confirms each curated card is still live rather than expanding the
+  // list — unlike the old version of this function, a slug on cardadda.in
+  // that ISN'T in CARD_CATALOG is never added here; the WhatsApp picker is
+  // deliberately limited to the 12 cards with a hand-verified pitch above.
   async function loadCardCatalog() {
     try {
       const ctl = new AbortController();
@@ -1476,13 +1590,10 @@
       clearTimeout(timer);
       if (!res.ok) return CARD_CATALOG;
       const xml = await res.text();
-      const live = [...xml.matchAll(/\/cards\/([a-z0-9-]+)<\/loc>/g)].map(m => m[1]);
-      if (!live.length) return CARD_CATALOG;
-      const known = new Map(CARD_CATALOG.map(c => [c.slug, c]));
-      return live.map(slug => known.get(slug) || {
-        name: slug.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
-        issuer: "", slug
-      });
+      const live = new Set([...xml.matchAll(/\/cards\/([a-z0-9-]+)<\/loc>/g)].map(m => m[1]));
+      if (!live.size) return CARD_CATALOG;
+      const stillLive = CARD_CATALOG.filter(c => live.has(c.slug));
+      return stillLive.length ? stillLive : CARD_CATALOG;
     } catch (e) {
       return CARD_CATALOG;
     }
@@ -1502,14 +1613,23 @@
     const host = $("modalHost");
     const close = () => { host.innerHTML = ""; };
 
+    // *bold* is WhatsApp's own markdown, rendered as real bold in the chat.
+    // Falls back to a plain name + link line for any card missing from
+    // CARD_PITCHES (shouldn't happen for anything in CARD_CATALOG, but
+    // keeps this from ever producing a broken-looking message if it does).
+    const cardBlock = c => {
+      const link = CARD_SITE + "/cards/" + c.slug;
+      const pitch = CARD_PITCHES[c.slug];
+      return pitch ? "*" + pitch.title + "*\n" + pitch.bullets.join("\n") + "\n" + link
+                   : c.name + "\n" + link;
+    };
+
     const openChat = chosen => {
       let url = "https://wa.me/" + waNumber(lead.mobile);
       if (chosen.length) {
         const hasName = lead.name && lead.name.trim() && lead.name !== UNKNOWN_NAME;
-        const greeting = hasName ? "Hi " + lead.name.trim().split(/\s+/)[0] : "Hi";
-        const text = greeting + ", as discussed, here " +
-          (chosen.length === 1 ? "is the card page:" : "are the card pages:") +
-          chosen.map(c => "\n\n" + c.name + "\n" + CARD_SITE + "/cards/" + c.slug).join("");
+        const greeting = (hasName ? "Hi " + lead.name.trim().split(/\s+/)[0] : "Hi") + "! 👋";
+        const text = greeting + chosen.map(c => "\n\n" + cardBlock(c)).join("");
         url += "?text=" + encodeURIComponent(text);
       }
       close();
