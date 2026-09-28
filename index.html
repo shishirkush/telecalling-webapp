@@ -1602,8 +1602,10 @@
   /**
    * The agent ticks whichever card pages fit the conversation; only those
    * links go into the WhatsApp message, which they can still edit before
-   * sending. "Chat only" skips the links. Mirrors CardPickerDialog in the
-   * Android app.
+   * sending. "Chat only" skips the links. Defaults to the lead's own
+   * number, but the agent can redirect the whole message to a different
+   * number instead — e.g. the same customer calling back later from
+   * another phone. Mirrors CardPickerDialog in the Android app.
    */
   function showCardPicker() {
     const lead = state.selected;
@@ -1612,6 +1614,8 @@
     const selected = new Set();
     const host = $("modalHost");
     const close = () => { host.innerHTML = ""; };
+    let useOtherNumber = false;
+    let otherNumber = "";
 
     // *bold* is WhatsApp's own markdown, rendered as real bold in the chat.
     // Falls back to a plain name + link line for any card missing from
@@ -1624,8 +1628,14 @@
                    : c.name + "\n" + link;
     };
 
+    // 10 bare digits is "good enough" here — same bar waNumber() itself
+    // applies before deciding whether to prepend the 91 country code.
+    const otherNumberValid = () => otherNumber.replace(/\D/g, "").length >= 10;
+    const canProceed = () => !useOtherNumber || otherNumberValid();
+
     const openChat = chosen => {
-      let url = "https://wa.me/" + waNumber(lead.mobile);
+      const target = useOtherNumber ? otherNumber : lead.mobile;
+      let url = "https://wa.me/" + waNumber(target);
       if (chosen.length) {
         const hasName = lead.name && lead.name.trim() && lead.name !== UNKNOWN_NAME;
         const greeting = (hasName ? "Hi " + lead.name.trim().split(/\s+/)[0] : "Hi") + "! 👋";
@@ -1636,10 +1646,32 @@
       window.open(url, "_blank", "noopener");
     };
 
+    // Toggles Send/Chat-only without a full re-render, so typing in the
+    // number field never loses focus or cursor position.
+    const updateButtons = () => {
+      const ok = canProceed();
+      $("cardPickerChatOnly").disabled = !ok;
+      $("cardPickerSend").disabled = !ok || !selected.size;
+    };
+
     const render = () => {
       host.innerHTML = `<div class="modal-backdrop" id="cardPickerBackdrop">
         <div class="modal-sheet">
           <h2>Which cards to send?</h2>
+          <div class="rf-row" style="margin:4px 0 12px">
+            <div class="v" style="margin-bottom:6px">Send to</div>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:6px">
+              <input type="radio" name="sendTo" id="sendToLead" ${!useOtherNumber ? "checked" : ""} />
+              <span>${esc(lead.mobile)} (this lead)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+              <input type="radio" name="sendTo" id="sendToOther" ${useOtherNumber ? "checked" : ""} />
+              <span>Another number</span>
+            </label>
+            ${useOtherNumber ? `<input type="tel" id="otherNumberInput" placeholder="10-digit mobile number"
+              value="${esc(otherNumber)}" style="margin-top:8px; width:100%; padding:8px 10px;
+              border:1px solid var(--border); border-radius:8px; font-size:14px; background:var(--surface); color:var(--text)" />` : ""}
+          </div>
           <p class="muted" style="margin:-6px 0 8px">Pick up to ${MAX_CARDS}</p>
           ${cards.map(c => `<label class="rf-row" style="display:flex; align-items:center; gap:12px; cursor:pointer">
             <input type="checkbox" data-slug="${esc(c.slug)}" ${selected.has(c.slug) ? "checked" : ""} ${!selected.has(c.slug) && selected.size >= MAX_CARDS ? "disabled" : ""} />
@@ -1656,15 +1688,22 @@
       $("cardPickerCancel").onclick = close;
       $("cardPickerChatOnly").onclick = () => openChat([]);
       $("cardPickerSend").onclick = () => openChat(cards.filter(c => selected.has(c.slug)));
+      $("sendToLead").onchange = () => { useOtherNumber = false; render(); };
+      $("sendToOther").onchange = () => { useOtherNumber = true; render(); $("otherNumberInput")?.focus(); };
+      const otherInput = $("otherNumberInput");
+      if (otherInput) {
+        otherInput.oninput = e => { otherNumber = e.target.value; updateButtons(); };
+      }
       host.querySelectorAll("input[data-slug]").forEach(box => {
         box.onchange = () => {
           if (box.checked) selected.add(box.dataset.slug); else selected.delete(box.dataset.slug);
           const send = $("cardPickerSend");
-          send.disabled = !selected.size;
           send.textContent = selected.size ? "Send (" + selected.size + ")" : "Send";
           host.querySelectorAll("input[data-slug]").forEach(b => { b.disabled = !b.checked && selected.size >= MAX_CARDS; });
+          updateButtons();
         };
       });
+      updateButtons();
     };
 
     render();
