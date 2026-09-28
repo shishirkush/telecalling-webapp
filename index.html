@@ -299,6 +299,7 @@
     <span class="spacer"></span>
     <button class="icon" id="myNumberBtn" title="My calling number">☎</button>
     <button class="icon" id="openSearchBtn" title="Search customer">🔍</button>
+    <button class="icon" id="headerWhatsAppBtn" title="WhatsApp any number">🟢</button>
     <button class="icon" id="openCampaignBtn" title="Switch campaign">🗂</button>
     <button class="icon" id="refreshBtn" title="Refresh">⟳</button>
     <button class="icon" id="signOutBtn" title="Sign out">⎋</button>
@@ -1078,6 +1079,9 @@
 
   $("openCampaignBtn").onclick = openCampaignPicker;
   $("campaignBackBtn").onclick = () => setState({ screen: "app" });
+  // No lead required — see showCardPicker()'s doc comment. Available any
+  // time the agent is signed in, regardless of calling hours or queue state.
+  $("headerWhatsAppBtn").onclick = () => showCardPicker(null);
 
   // -----------------------------------------------------------------
   // Render
@@ -1602,19 +1606,22 @@
   /**
    * The agent ticks whichever card pages fit the conversation; only those
    * links go into the WhatsApp message, which they can still edit before
-   * sending. "Chat only" skips the links. Defaults to the lead's own
-   * number, but the agent can redirect the whole message to a different
-   * number instead — e.g. the same customer calling back later from
-   * another phone. Mirrors CardPickerDialog in the Android app.
+   * sending. "Chat only" skips the links. [lead] defaults to whatever's
+   * currently open, but this also opens with no lead at all (from the
+   * header's WhatsApp icon) — there's no "claim a lead first" gate on
+   * messaging someone, e.g. outside calling hours or for a number that
+   * isn't in the queue yet. Without a lead the agent must type a number;
+   * with one, they can still redirect to a different number instead — e.g.
+   * the same customer calling back later from another phone. Mirrors
+   * CardPickerDialog in the Android app.
    */
-  function showCardPicker() {
-    const lead = state.selected;
-    if (!lead) return;
+  function showCardPicker(lead = state.selected) {
+    const hasLead = !!lead;
     let cards = pinFirst(CARD_CATALOG);
     const selected = new Set();
     const host = $("modalHost");
     const close = () => { host.innerHTML = ""; };
-    let useOtherNumber = false;
+    let useOtherNumber = !hasLead; // no lead number to default to — must type one
     let otherNumber = "";
 
     // *bold* is WhatsApp's own markdown, rendered as real bold in the chat.
@@ -1637,7 +1644,7 @@
       const target = useOtherNumber ? otherNumber : lead.mobile;
       let url = "https://wa.me/" + waNumber(target);
       if (chosen.length) {
-        const hasName = lead.name && lead.name.trim() && lead.name !== UNKNOWN_NAME;
+        const hasName = hasLead && lead.name && lead.name.trim() && lead.name !== UNKNOWN_NAME;
         const greeting = (hasName ? "Hi " + lead.name.trim().split(/\s+/)[0] : "Hi") + "! 👋";
         const text = greeting + chosen.map(c => "\n\n" + cardBlock(c)).join("");
         url += "?text=" + encodeURIComponent(text);
@@ -1659,7 +1666,8 @@
         <div class="modal-sheet">
           <h2>Which cards to send?</h2>
           <div class="rf-row" style="margin:4px 0 12px">
-            <div class="v" style="margin-bottom:6px">Send to</div>
+            <div class="v" style="margin-bottom:6px">${hasLead ? "Send to" : "Customer's WhatsApp number"}</div>
+            ${hasLead ? `
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:6px">
               <input type="radio" name="sendTo" id="sendToLead" ${!useOtherNumber ? "checked" : ""} />
               <span>${esc(lead.mobile)} (this lead)</span>
@@ -1667,7 +1675,7 @@
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
               <input type="radio" name="sendTo" id="sendToOther" ${useOtherNumber ? "checked" : ""} />
               <span>Another number</span>
-            </label>
+            </label>` : ""}
             ${useOtherNumber ? `<input type="tel" id="otherNumberInput" placeholder="10-digit mobile number"
               value="${esc(otherNumber)}" style="margin-top:8px; width:100%; padding:8px 10px;
               border:1px solid var(--border); border-radius:8px; font-size:14px; background:var(--surface); color:var(--text)" />` : ""}
@@ -1688,8 +1696,10 @@
       $("cardPickerCancel").onclick = close;
       $("cardPickerChatOnly").onclick = () => openChat([]);
       $("cardPickerSend").onclick = () => openChat(cards.filter(c => selected.has(c.slug)));
-      $("sendToLead").onchange = () => { useOtherNumber = false; render(); };
-      $("sendToOther").onchange = () => { useOtherNumber = true; render(); $("otherNumberInput")?.focus(); };
+      if (hasLead) {
+        $("sendToLead").onchange = () => { useOtherNumber = false; render(); };
+        $("sendToOther").onchange = () => { useOtherNumber = true; render(); $("otherNumberInput")?.focus(); };
+      }
       const otherInput = $("otherNumberInput");
       if (otherInput) {
         otherInput.oninput = e => { otherNumber = e.target.value; updateButtons(); };
