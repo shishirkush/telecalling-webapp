@@ -1245,7 +1245,17 @@
     } else if (!state.bankApps.length) {
       html += `<div class="empty-state">No applications logged yet.</div>`;
     } else {
-      html += state.bankApps.map(bankAppRowHtml).join("");
+      // Already sorted applied_at desc, id desc by loadBankApps() —
+      // walking that same order and re-labelling on every date change
+      // groups it datewise, latest to earliest, with no extra sort here.
+      let lastDate = null;
+      state.bankApps.forEach(row => {
+        if (row.applied_at !== lastDate) {
+          lastDate = row.applied_at;
+          html += `<div class="section-label">${esc(formatDob(row.applied_at))}</div>`;
+        }
+        html += bankAppRowHtml(row);
+      });
     }
     body.innerHTML = html;
 
