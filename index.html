@@ -1241,19 +1241,15 @@
     </div>`;
   }
 
-  // List row is a summary only — lead (customer + phone), bank (bank +
-  // card), and applied date, the three things asked to show here. Full
-  // detail (application id, VKYC/approval/activation, edit) lives on
-  // screenBankAppDetail, opened by tapping the card.
+  // List row is a summary only — date, customer name, bank, nothing
+  // else. Everything else (mobile, card, application id, VKYC/approval/
+  // activation, edit) lives on screenBankAppDetail, opened by tapping
+  // the card.
   function bankAppRowHtml(row) {
     return `<div class="lead-card" data-open-ba="${row.id}">
       <div class="body">
         <div class="name">${esc(row.customer_name)} · ${esc(row.bank)}</div>
-        ${row.card_name ? `<div class="company">${esc(row.card_name)}</div>` : ""}
-        <div class="attempts">${esc(row.phone)} · ${esc(formatDob(row.applied_at))}</div>
-      </div>
-      <div class="side">
-        <span class="attempts">${esc(APPROVAL_STATUS_LABEL[row.approval_status] || row.approval_status)}</span>
+        <div class="attempts">${esc(formatDob(row.applied_at))}</div>
       </div>
     </div>`;
   }
