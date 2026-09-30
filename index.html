@@ -1319,7 +1319,10 @@
       html += fieldRow("Application ID", esc(row.application_id || "—"));
       html += fieldRow("VKYC status", esc(VKYC_STATUS_META.find(v => v.wire === row.vkyc_status)?.label || row.vkyc_status));
       html += `<div class="section-label">Status</div>`;
-      html += fieldRow("Approval", esc(APPROVAL_STATUS_LABEL[row.approval_status] || row.approval_status));
+      const approvalText = esc(APPROVAL_STATUS_LABEL[row.approval_status] || row.approval_status);
+      html += fieldRow("Approval", row.approval_status === "APPROVED"
+        ? `<span style="color:var(--s-lead); font-weight:700">${approvalText}</span>`
+        : approvalText);
       html += fieldRow("Activation", esc(ACTIVATION_STATUS_LABEL[row.activation_status] || row.activation_status) +
         (row.activation_note ? ` (${esc(row.activation_note)})` : ""));
       html += fieldRow("Applied", esc(formatDob(row.applied_at)));
