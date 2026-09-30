@@ -135,6 +135,9 @@
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
     padding: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
   }
+  /* An approved bank application's whole card, not just a status label. */
+  .lead-card.approved { background: var(--s-lead); border-color: var(--s-lead); }
+  .lead-card.approved .name, .lead-card.approved .attempts, .lead-card.approved .company { color: #fff; }
   .lead-card .body { flex: 1; min-width: 0; }
   .lead-card .name { font-size: 15.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lead-card .company { font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1246,7 +1249,8 @@
   // activation, edit) lives on screenBankAppDetail, opened by tapping
   // the card.
   function bankAppRowHtml(row) {
-    return `<div class="lead-card" data-open-ba="${row.id}">
+    const approved = row.approval_status === "APPROVED";
+    return `<div class="lead-card${approved ? " approved" : ""}" data-open-ba="${row.id}">
       <div class="body">
         <div class="name">${esc(row.customer_name)} · ${esc(row.bank)}</div>
         <div class="attempts">${esc(formatDob(row.applied_at))}</div>
@@ -1319,10 +1323,7 @@
       html += fieldRow("Application ID", esc(row.application_id || "—"));
       html += fieldRow("VKYC status", esc(VKYC_STATUS_META.find(v => v.wire === row.vkyc_status)?.label || row.vkyc_status));
       html += `<div class="section-label">Status</div>`;
-      const approvalText = esc(APPROVAL_STATUS_LABEL[row.approval_status] || row.approval_status);
-      html += fieldRow("Approval", row.approval_status === "APPROVED"
-        ? `<span style="color:var(--s-lead); font-weight:700">${approvalText}</span>`
-        : approvalText);
+      html += fieldRow("Approval", esc(APPROVAL_STATUS_LABEL[row.approval_status] || row.approval_status));
       html += fieldRow("Activation", esc(ACTIVATION_STATUS_LABEL[row.activation_status] || row.activation_status) +
         (row.activation_note ? ` (${esc(row.activation_note)})` : ""));
       html += fieldRow("Applied", esc(formatDob(row.applied_at)));
