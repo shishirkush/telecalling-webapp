@@ -224,6 +224,15 @@
   .search-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
   .search-card .mob { color: var(--navy); font-weight: 600; margin-top: 4px; font-size: 13.5px; }
 
+  /* ---- my leads (table view) ---- */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface); border-radius: 12px; overflow: hidden; }
+  table.data-table th, table.data-table td { padding: 10px 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  table.data-table th { color: var(--text-2); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; }
+  table.data-table tbody tr { cursor: pointer; }
+  table.data-table tbody tr:active { background: var(--surface-alt); }
+  table.data-table tbody tr:last-child td { border-bottom: none; }
+
   /* ---- modal (search detail, sim picker n/a) ---- */
   .modal-backdrop {
     position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 20;
@@ -307,7 +316,9 @@
   <div class="tabs">
     <button data-tab="0" class="active">Queue</button>
     <button data-tab="1">CallBacks <span id="cbCount"></span></button>
-    <button data-tab="2">Apply Card</button>
+    <button data-tab="2">My Leads</button>
+    <button data-tab="3">Bank Apps</button>
+    <button data-tab="4">Apply Card</button>
   </div>
   <main class="screen" id="queueBody"></main>
   <button class="fab hidden" id="nextLeadBtn">+ Next lead</button>
@@ -367,7 +378,7 @@
   // floor, login-event fixes) before that was noticed from the
   // dashboard. Doesn't need to match Android's version number, just
   // needs to change so the dashboard reflects reality.
-  const WEB_APP_VERSION = "1.10.8-web";
+  const WEB_APP_VERSION = "1.11.0-web";
 
   // The Apply Card SMS (SimManager.kt's APPLY_CARD_SMS_TEXT on Android)
   // cannot be sent silently from a browser — there is no such API on
@@ -406,6 +417,18 @@
     { wire: "WARM", label: "Warm" },
     { wire: "COLD", label: "Cold" }
   ];
+
+  // Mirrors backend/36_bank_applications.sql's enums exactly — the wire
+  // values are what the RPCs/view actually send and expect.
+  const VKYC_STATUS_META = [
+    { wire: "PENDING",       label: "Pending" },
+    { wire: "BIO_KYC",       label: "Bio KYC" },
+    { wire: "BIO_KYC_DONE",  label: "Bio KYC Done" },
+    { wire: "DONE",          label: "Done" },
+    { wire: "DECLINED",      label: "Declined" }
+  ];
+  const APPROVAL_STATUS_LABEL = { PENDING: "Pending", APPROVED: "Approved", DECLINED: "Declined", DONE: "Done" };
+  const ACTIVATION_STATUS_LABEL = { PENDING: "Pending", ACTIVE: "Active", INACTIVE: "Inactive" };
 
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -451,7 +474,16 @@
     searching: false,
     searchError: null,
     searchResults: [],
-    searchSelected: null
+    searchSelected: null,
+
+    // ---- Bank applications tab (backend/36_bank_applications.sql) ----
+    bankApps: [],
+    bankAppsLoaded: false,
+    bankAppsLoading: false,
+    bankAppsError: null,
+    bankAppSaving: false,
+    bankAppEditingId: null,   // null = "new entry" form is closed
+    bankAppForm: { bank: "", application_id: "", phone: "", customer_name: "", card_name: "", vkyc_status: "PENDING" }
   };
 
   function setState(patch) {
@@ -555,7 +587,10 @@
       callAttemptConfirmedAt: null, formStatus: null, formQuality: null, formRemarks: "",
       formCallbackAt: null, editing: false, editName: "", editEmail: "", editDob: "",
       editCompany: "", editIncome: "", editAddress: "",
-      searchQuery: "", searching: false, searchError: null, searchResults: [], searchSelected: null };
+      searchQuery: "", searching: false, searchError: null, searchResults: [], searchSelected: null,
+      bankApps: [], bankAppsLoaded: false, bankAppsLoading: false, bankAppsError: null,
+      bankAppSaving: false, bankAppEditingId: null,
+      bankAppForm: { bank: "", application_id: "", phone: "", customer_name: "", card_name: "", vkyc_status: "PENDING" } };
     render();
   }
 
@@ -633,7 +668,10 @@
       profile: null, queue: [], selected: null, hasCalledThisLead: false, callAttemptConfirmedAt: null,
       formStatus: null, formQuality: null, formRemarks: "", formCallbackAt: null,
       editing: false, editName: "", editEmail: "", editDob: "", editCompany: "", editIncome: "", editAddress: "",
-      searchQuery: "", searching: false, searchError: null, searchResults: [], searchSelected: null };
+      searchQuery: "", searching: false, searchError: null, searchResults: [], searchSelected: null,
+      bankApps: [], bankAppsLoaded: false, bankAppsLoading: false, bankAppsError: null,
+      bankAppSaving: false, bankAppEditingId: null,
+      bankAppForm: { bank: "", application_id: "", phone: "", customer_name: "", card_name: "", vkyc_status: "PENDING" } };
     render();
   };
 
@@ -798,8 +836,9 @@
       document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("active"));
       b.classList.add("active");
       const tab = Number(b.dataset.tab);
-      if (tab === 2) { window.open(APPLY_CARD_URL, "_blank"); return; }
+      if (tab === 4) { window.open(APPLY_CARD_URL, "_blank"); return; }
       setState({ tab });
+      if (tab === 3 && !state.bankAppsLoaded) loadBankApps();
     };
   });
 
@@ -1084,6 +1123,208 @@
   $("headerWhatsAppBtn").onclick = () => showCardPicker(null);
 
   // -----------------------------------------------------------------
+  // Bank applications — what happens to a lead AFTER an agent gets them
+  // to apply for a card. Mirrors backend/36_bank_applications.sql:
+  // agent owns bank/application id/phone/customer/card/VKYC status;
+  // approval + activation are admin/manager-only and read-only here.
+  // -----------------------------------------------------------------
+  async function loadBankApps() {
+    setState({ bankAppsLoading: true, bankAppsError: null });
+    const { data, error } = await sb.from("v_bank_applications")
+      .select("*")
+      .order("applied_at", { ascending: false })
+      .order("id", { ascending: false });
+    if (error) { setState({ bankAppsLoading: false, bankAppsError: error.message }); return; }
+    setState({ bankAppsLoading: false, bankAppsLoaded: true, bankApps: data || [] });
+  }
+
+  function startNewBankApp() {
+    setState({
+      bankAppEditingId: "new", bankAppsError: null,
+      bankAppForm: { bank: "", application_id: "", phone: "", customer_name: "", card_name: "", vkyc_status: "PENDING" }
+    });
+  }
+  function startEditBankApp(row) {
+    setState({
+      bankAppEditingId: row.id, bankAppsError: null,
+      bankAppForm: {
+        bank: row.bank, application_id: row.application_id || "", phone: row.phone,
+        customer_name: row.customer_name, card_name: row.card_name || "", vkyc_status: row.vkyc_status
+      }
+    });
+  }
+  function cancelBankAppForm() { setState({ bankAppEditingId: null, bankAppsError: null }); }
+  function setBankAppField(key, value) {
+    setState({ bankAppForm: { ...state.bankAppForm, [key]: value } });
+  }
+
+  async function saveBankApp() {
+    const f = state.bankAppForm;
+    const isNew = state.bankAppEditingId === "new";
+    if (isNew && !f.bank.trim()) { setState({ bankAppsError: "Bank is required." }); return; }
+    if (!f.phone.trim() || !f.customer_name.trim()) {
+      setState({ bankAppsError: "Phone and customer name are required." });
+      return;
+    }
+    setState({ bankAppSaving: true, bankAppsError: null });
+    // Editing an existing entry only ever touches name/application id/card/
+    // mobile — never bank or VKYC status, and never approval/activation,
+    // which only admin can set (backend/36_bank_applications.sql).
+    const rpc = isNew ? "log_bank_application" : "update_bank_application";
+    const params = isNew ? {
+      p_bank: f.bank.trim(), p_customer_name: f.customer_name.trim(), p_phone: f.phone.trim(),
+      p_application_id: f.application_id.trim() || null, p_card_name: f.card_name.trim() || null,
+      p_vkyc_status: f.vkyc_status
+    } : {
+      p_id: state.bankAppEditingId, p_customer_name: f.customer_name.trim(),
+      p_phone: f.phone.trim(), p_application_id: f.application_id.trim() || null,
+      p_card_name: f.card_name.trim() || null
+    };
+    const { error } = await sb.rpc(rpc, params);
+    if (error) { setState({ bankAppSaving: false, bankAppsError: error.message }); return; }
+    setState({ bankAppSaving: false, bankAppEditingId: null });
+    loadBankApps();
+  }
+
+  function bankAppFormHtml() {
+    const f = state.bankAppForm;
+    const isNew = state.bankAppEditingId === "new";
+    return `<div class="record-card">
+      <div class="section-label">${isNew ? "Log a new application" : "Edit application"}</div>
+      ${isNew ? `
+      <div class="field"><label>Bank</label><input id="baBank" list="bankNames" value="${esc(f.bank)}"></div>
+      <datalist id="bankNames">
+        <option value="AXIS"><option value="HDFC"><option value="IDFC"><option value="INDUS"><option value="SBI"><option value="YES POP">
+      </datalist>` : `<div class="rf-row"><div class="l">Bank</div><div class="v">${esc(f.bank)}</div></div>`}
+      <div class="field"><label>Customer name</label><input id="baCustomerName" value="${esc(f.customer_name)}"></div>
+      <div class="field"><label>Phone</label><input id="baPhone" inputmode="numeric" value="${esc(f.phone)}"></div>
+      <div class="field"><label>Application ID (if known)</label><input id="baAppId" value="${esc(f.application_id)}"></div>
+      <div class="field"><label>Card (if this bank names one)</label><input id="baCardName" value="${esc(f.card_name)}"></div>
+      ${isNew ? `
+      <div class="field"><label>VKYC status</label>
+        <select id="baVkycStatus">
+          ${VKYC_STATUS_META.map(v => `<option value="${v.wire}" ${v.wire === f.vkyc_status ? "selected" : ""}>${esc(v.label)}</option>`).join("")}
+        </select>
+      </div>` : `<div class="hint2" style="text-align:left; margin:-4px 0 10px">
+        Bank and VKYC status can only be set when logging a new application.
+        Approval and activation are set by admin only.</div>`}
+      ${state.bankAppsError ? `<div class="banner-err">${esc(state.bankAppsError)}</div>` : ""}
+      <div class="save-bar" style="display:flex; gap:8px">
+        <button class="secondary" id="baCancelBtn" style="flex:1">Cancel</button>
+        <button class="primary" id="baSaveBtn" style="flex:1" ${state.bankAppSaving ? "disabled" : ""}>
+          ${state.bankAppSaving ? '<span class="spinner"></span>' : "Save"}
+        </button>
+      </div>
+    </div>`;
+  }
+
+  function bankAppRowHtml(row) {
+    return `<div class="lead-card" style="align-items:flex-start">
+      <div class="body">
+        <div class="name">${esc(row.customer_name)} · ${esc(row.bank)}</div>
+        ${row.card_name ? `<div class="company">${esc(row.card_name)}</div>` : ""}
+        <div class="attempts">${esc(row.phone)}${row.application_id ? " · " + esc(row.application_id) : ""}</div>
+        <div style="margin-top:6px; font-size:12.5px; color:var(--text-2)">
+          VKYC: ${esc(VKYC_STATUS_META.find(v => v.wire === row.vkyc_status)?.label || row.vkyc_status)}
+          &nbsp;·&nbsp; Approval: ${esc(APPROVAL_STATUS_LABEL[row.approval_status] || row.approval_status)}
+          &nbsp;·&nbsp; Activation: ${esc(ACTIVATION_STATUS_LABEL[row.activation_status] || row.activation_status)}
+        </div>
+        ${row.activation_note ? `<div style="margin-top:2px; font-size:12.5px; color:var(--text-muted)">${esc(row.activation_note)}</div>` : ""}
+      </div>
+      <div class="side">
+        <button class="secondary" data-edit-ba="${row.id}">Edit</button>
+      </div>
+    </div>`;
+  }
+
+  function renderBankAppsTab() {
+    const body = $("queueBody");
+    let html = "";
+    if (state.bankAppEditingId) {
+      html += bankAppFormHtml();
+    } else {
+      html += `<button class="primary" id="baNewBtn" style="margin-bottom:12px">+ Log application</button>`;
+    }
+    if (state.bankAppsError && !state.bankAppEditingId) html += `<div class="banner-err">${esc(state.bankAppsError)}</div>`;
+    if (state.bankAppsLoading) {
+      html += `<div class="center-spin"><span class="spinner"></span></div>`;
+    } else if (!state.bankApps.length) {
+      html += `<div class="empty-state">No applications logged yet.</div>`;
+    } else {
+      html += state.bankApps.map(bankAppRowHtml).join("");
+    }
+    body.innerHTML = html;
+
+    const cancelBtn = $("baCancelBtn"); if (cancelBtn) cancelBtn.onclick = cancelBankAppForm;
+    const newBtn = $("baNewBtn"); if (newBtn) newBtn.onclick = startNewBankApp;
+    const saveBtn = $("baSaveBtn");
+    if (saveBtn) saveBtn.onclick = () => {
+      const isNew = state.bankAppEditingId === "new";
+      const patch = {
+        customer_name: $("baCustomerName").value,
+        phone: $("baPhone").value,
+        application_id: $("baAppId").value,
+        card_name: $("baCardName").value
+      };
+      if (isNew) {
+        patch.bank = $("baBank").value;
+        patch.vkyc_status = $("baVkycStatus").value;
+      }
+      setState({ bankAppForm: { ...state.bankAppForm, ...patch } });
+      saveBankApp();
+    };
+    body.querySelectorAll("[data-edit-ba]").forEach(el => {
+      el.onclick = () => {
+        const row = state.bankApps.find(r => String(r.id) === el.dataset.editBa);
+        if (row) startEditBankApp(row);
+      };
+    });
+  }
+
+  // -----------------------------------------------------------------
+  // My Leads — every lead currently assigned to this agent (not just
+  // the single "next lead" the Queue tab surfaces), as a scannable
+  // table instead of one card at a time.
+  // -----------------------------------------------------------------
+  function renderMyLeadsTab() {
+    const body = $("queueBody");
+    const banners =
+      (state.error ? `<div class="banner-err">${esc(state.error)}</div>` : "") +
+      (state.info ? `<div class="banner-info">${esc(state.info)}</div>` : "");
+    if (state.loading && state.queue.length === 0) {
+      body.innerHTML = banners + `<div class="center-spin"><span class="spinner"></span></div>`;
+      return;
+    }
+    if (!state.queue.length) {
+      body.innerHTML = banners + `<div class="empty-state">Nothing assigned to you right now.</div>`;
+      return;
+    }
+    const rows = state.queue.slice().sort((a, b) =>
+      (a.callback_at ? new Date(a.callback_at).getTime() : Infinity) -
+      (b.callback_at ? new Date(b.callback_at).getTime() : Infinity));
+    body.innerHTML = banners + `<div class="table-scroll"><table class="data-table">
+      <thead><tr><th>Name</th><th>Mobile</th><th>Status</th><th>Callback</th><th>Attempts</th></tr></thead>
+      <tbody>${rows.map(l => {
+        const meta = statusMeta(l.last_status);
+        const overdue = l.callback_at && isPast(l.callback_at);
+        return `<tr data-open-lead="${l.id}">
+          <td>${esc(l.name)}</td>
+          <td>${esc(l.mobile)}</td>
+          <td>${meta ? `<span class="status-chip" style="background:color-mix(in srgb, ${meta.color} 16%, transparent); color:${meta.color}">${esc(meta.label)}</span>` : "—"}</td>
+          <td class="${overdue ? "overdue" : ""}" style="${overdue ? "color:var(--critical)" : ""}">${l.callback_at ? esc(formatTimestamp(l.callback_at)) : "—"}</td>
+          <td>${l.attempts || 0}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table></div>`;
+    body.querySelectorAll("[data-open-lead]").forEach(el => {
+      el.onclick = () => {
+        const lead = state.queue.find(l => String(l.id) === el.dataset.openLead);
+        if (lead) openLead(lead);
+      };
+    });
+  }
+
+  // -----------------------------------------------------------------
   // Render
   // -----------------------------------------------------------------
   function render() {
@@ -1116,10 +1357,12 @@
     const freshLeads = state.queue.filter(l => !l.callback_at);
     $("cbCount").textContent = callbackLeads.length ? `(${callbackLeads.length})` : "";
 
-    show($("nextLeadBtn"), state.tab !== 2);
+    show($("nextLeadBtn"), state.tab === 0 || state.tab === 1);
 
     const body = $("queueBody");
-    if (state.tab === 2) { body.innerHTML = ""; return; }
+    if (state.tab === 4) { body.innerHTML = ""; return; }
+    if (state.tab === 2) { renderMyLeadsTab(); return; }
+    if (state.tab === 3) { renderBankAppsTab(); return; }
 
     const banners =
       (state.error ? `<div class="banner-err">${esc(state.error)}</div>` : "") +
