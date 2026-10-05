@@ -380,7 +380,7 @@
   // floor, login-event fixes) before that was noticed from the
   // dashboard. Doesn't need to match Android's version number, just
   // needs to change so the dashboard reflects reality.
-  const WEB_APP_VERSION = "1.11.0-web";
+  const WEB_APP_VERSION = "1.11.1-web";
 
   // The Apply Card SMS (SimManager.kt's APPLY_CARD_SMS_TEXT on Android)
   // cannot be sent silently from a browser — there is no such API on
@@ -755,6 +755,16 @@
 
     await refreshQueue();
 
+    // Back from a call the tab reloaded during: reopen that same lead so
+    // the agent lands on its Save form, not an empty queue. If it's no
+    // longer in their queue (already saved elsewhere), the marker is stale.
+    const pendingCall = loadPendingCall();
+    if (pendingCall) {
+      const resumeLead = state.queue.find(l => l.id === pendingCall.leadId);
+      if (resumeLead && state.screen === "app") openLead(resumeLead);
+      else if (!resumeLead) clearPendingCall();
+    }
+
     // Fire-and-forget, same as AppViewModel.kt's own coroutine — must
     // never be able to slow down or fail the queue load above. No
     // device_id equivalent to ANDROID_ID exists on the web without
@@ -865,15 +875,41 @@
     return typeof msg === "string" && msg.includes("is not assigned to you");
   }
   function bounceStaleLead() {
+    clearPendingCall();
     setState({ screen: "app", selected: null, error: null, info: "That lead was already handled elsewhere. Refreshed your queue." });
     refreshQueue();
   }
 
+  // A tel: link hands the phone to the dialer, and iOS Safari routinely
+  // reloads the tab when the agent comes back — which wiped
+  // hasCalledThisLead and left Save permanently disabled ("Call this
+  // customer first") for a call the server had already recorded. The
+  // Android app survives the same thing via savePendingCall(); this is
+  // the web equivalent. localStorage can throw (private mode), so every
+  // access is wrapped and the feature just degrades to the old behaviour.
+  const PENDING_CALL_KEY = "telecall_pending_call";
+  const PENDING_CALL_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  function savePendingCall(leadId, confirmedAt) {
+    try { localStorage.setItem(PENDING_CALL_KEY, JSON.stringify({ leadId, confirmedAt })); } catch (e) {}
+  }
+  function clearPendingCall() {
+    try { localStorage.removeItem(PENDING_CALL_KEY); } catch (e) {}
+  }
+  function loadPendingCall() {
+    try {
+      const p = JSON.parse(localStorage.getItem(PENDING_CALL_KEY) || "null");
+      if (p && p.leadId != null && Date.now() - p.confirmedAt < PENDING_CALL_MAX_AGE_MS) return p;
+    } catch (e) {}
+    return null;
+  }
+
   async function openLead(lead) {
+    const pending = loadPendingCall();
+    const resumed = pending && pending.leadId === lead.id ? pending : null;
     setState({
       screen: "detail", selected: lead, error: null, info: null,
       formStatus: null, formQuality: null, formRemarks: "", formCallbackAt: null,
-      hasCalledThisLead: false, callAttemptConfirmedAt: null, editing: false
+      hasCalledThisLead: !!resumed, callAttemptConfirmedAt: resumed ? resumed.confirmedAt : null, editing: false
     });
     // The queue card that triggered this can be stale — another tab or
     // an earlier action may have already disposed this same lead. Re-check
@@ -884,6 +920,12 @@
     if (error || !data || data.assigned_to !== state.profile?.id) { bounceStaleLead(); return; }
     // Audit trail — the agent is about to see unmasked PAN/DOB/income.
     retryRpc("log_lead_view", { p_lead_id: lead.id });
+    // Resumed within the 30s dwell floor: nothing else re-renders when it
+    // passes (same reason onCallTapped schedules one), so schedule it here.
+    if (resumed) {
+      const remaining = MIN_CALL_DWELL_MS - (Date.now() - resumed.confirmedAt);
+      if (remaining > 0) setTimeout(() => { if (state.selected?.id === lead.id) render(); }, remaining + 50);
+    }
   }
   $("detailBackBtn").onclick = () => { setState({ screen: "app", selected: null }); refreshQueue(); };
 
@@ -916,7 +958,9 @@
       setState({ error: error.message });
       return;
     }
-    setState({ hasCalledThisLead: true, callAttemptConfirmedAt: Date.now() });
+    const confirmedAt = Date.now();
+    savePendingCall(lead.id, confirmedAt);
+    setState({ hasCalledThisLead: true, callAttemptConfirmedAt: confirmedAt });
     // canSave()/callDwellMsRemaining() are computed from wall-clock time,
     // so nothing re-evaluates them once the countdown starts unless
     // something else re-renders — this timeout is that: it exists purely
@@ -971,6 +1015,7 @@
       setState({ error: error.message });
       return;
     }
+    clearPendingCall();
     setState({ saving: false, info: "Saved.", screen: "app", selected: null });
     refreshQueue();
   }
