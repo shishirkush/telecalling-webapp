@@ -380,7 +380,7 @@
   // floor, login-event fixes) before that was noticed from the
   // dashboard. Doesn't need to match Android's version number, just
   // needs to change so the dashboard reflects reality.
-  const WEB_APP_VERSION = "1.11.2-web";
+  const WEB_APP_VERSION = "1.11.3-web";
 
   // The Apply Card SMS (SimManager.kt's APPLY_CARD_SMS_TEXT on Android)
   // cannot be sent silently from a browser — there is no such API on
@@ -931,9 +931,18 @@
 
   function isIOS() { return /iPhone|iPad|iPod/i.test(navigator.userAgent); }
 
+  // A tap that didn't seem to dial gets repeated within a second or two; each
+  // one used to log its own attempt (60 rows for 2 outcomes on one agent).
+  // Taps on the same lead inside this window still follow the tel: link —
+  // only the logging is skipped.
+  const CALL_TAP_DEDUPE_MS = 10000;
+  let lastCallTap = { leadId: null, at: 0 };
+
   async function onCallTapped() {
     const lead = state.selected;
     if (!lead) return;
+    if (lastCallTap.leadId === lead.id && Date.now() - lastCallTap.at < CALL_TAP_DEDUPE_MS) return;
+    lastCallTap = { leadId: lead.id, at: Date.now() };
     // Deliberately NOT setState(): that re-renders synchronously, replacing the
     // tapped <a href="tel:"> with a new element while its click is still being
     // handled — iOS Safari can then drop the tel: navigation, so the tap logs an
@@ -960,6 +969,7 @@
     const { error } = await retryRpc("log_call_attempt", { p_lead_id: lead.id });
     if (state.selected?.id !== lead.id) return;
     if (error) {
+      lastCallTap = { leadId: null, at: 0 }; // failed log: let the next tap retry it
       if (isNotAssignedError(error.message)) { bounceStaleLead(); return; }
       setState({ error: error.message });
       return;
