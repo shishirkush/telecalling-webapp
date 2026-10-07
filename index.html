@@ -380,7 +380,7 @@
   // floor, login-event fixes) before that was noticed from the
   // dashboard. Doesn't need to match Android's version number, just
   // needs to change so the dashboard reflects reality.
-  const WEB_APP_VERSION = "1.11.1-web";
+  const WEB_APP_VERSION = "1.11.2-web";
 
   // The Apply Card SMS (SimManager.kt's APPLY_CARD_SMS_TEXT on Android)
   // cannot be sent silently from a browser — there is no such API on
@@ -934,7 +934,13 @@
   async function onCallTapped() {
     const lead = state.selected;
     if (!lead) return;
-    setState({ error: null });
+    // Deliberately NOT setState(): that re-renders synchronously, replacing the
+    // tapped <a href="tel:"> with a new element while its click is still being
+    // handled — iOS Safari can then drop the tel: navigation, so the tap logs an
+    // attempt but never opens the dialer (the agent keeps tapping). The next
+    // render happens after the awaited log below, once the dialer hand-off has
+    // already started.
+    if (state.error) state = Object.assign({}, state, { error: null });
     retryRpc("log_sms_outcome", { p_lead_id: lead.id, p_mobile: lead.mobile, p_outcome: "call_tel_link_opened" });
     // Records the attempt server-side — save_disposition() refuses to
     // accept an outcome for this lead until this lands, and then not for
