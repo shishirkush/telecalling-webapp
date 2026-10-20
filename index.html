@@ -380,7 +380,7 @@
   // floor, login-event fixes) before that was noticed from the
   // dashboard. Doesn't need to match Android's version number, just
   // needs to change so the dashboard reflects reality.
-  const WEB_APP_VERSION = "1.11.3-web";
+  const WEB_APP_VERSION = "1.11.4-web";
 
   // The Apply Card SMS (SimManager.kt's APPLY_CARD_SMS_TEXT on Android)
   // cannot be sent silently from a browser — there is no such API on
@@ -918,6 +918,10 @@
     const { data, error } = await sb.from("leads").select("assigned_to").eq("id", lead.id).single();
     if (state.selected?.id !== lead.id) return; // navigated elsewhere already
     if (error || !data || data.assigned_to !== state.profile?.id) { bounceStaleLead(); return; }
+    // Remote Apply Card SMS switch (backend/44) — checked each time a lead opens.
+    sb.rpc("apply_card_sms_enabled").then(({ data }) => {
+      if (typeof data === "boolean" && state.smsEnabled !== data) setState({ smsEnabled: data });
+    });
     // Audit trail — the agent is about to see unmasked PAN/DOB/income.
     retryRpc("log_lead_view", { p_lead_id: lead.id });
     // Resumed within the 30s dwell floor: nothing else re-renders when it
@@ -1527,7 +1531,8 @@
 
     html += `<a class="text-apply-btn" href="#" id="whatsAppBtn">🟢 WhatsApp</a>`;
 
-    if (state.hasCalledThisLead) {
+    // Admin's remote switch (backend/44): hidden while Apply Card texts are paused.
+    if (state.hasCalledThisLead && state.smsEnabled !== false) {
       html += `<a class="text-apply-btn" href="${smsHref}" id="textApplyBtn">💬 Text the Apply Card link</a>`;
     }
 
