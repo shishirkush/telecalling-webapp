@@ -303,6 +303,7 @@
     <button class="icon" id="myNumberBtn" title="My calling number">☎</button>
     <button class="icon" id="openSearchBtn" title="Search customer">🔍</button>
     <button class="icon" id="headerWhatsAppBtn" title="WhatsApp any number">🟢</button>
+    <button class="icon" id="openTrainingBtn" title="Training material" style="font-weight:800">T</button>
     <button class="icon" id="openCampaignBtn" title="Switch campaign">🗂</button>
     <button class="icon" id="refreshBtn" title="Refresh">⟳</button>
     <button class="icon" id="signOutBtn" title="Sign out">⎋</button>
@@ -353,6 +354,17 @@
   <main class="screen" id="campaignBody"></main>
 </div>
 
+<!-- =============== TRAINING MATERIAL ("T") =============== -->
+<div id="screenTraining" class="hidden">
+  <header class="bar">
+    <button class="icon back" id="trainingBackBtn">←</button>
+    <h1>Training material</h1>
+    <span class="spacer"></span>
+    <button class="icon" id="trainingRefreshBtn" title="Refresh">⟳</button>
+  </header>
+  <main class="screen" id="trainingBody"></main>
+</div>
+
 <div id="modalHost"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -380,7 +392,7 @@
   // floor, login-event fixes) before that was noticed from the
   // dashboard. Doesn't need to match Android's version number, just
   // needs to change so the dashboard reflects reality.
-  const WEB_APP_VERSION = "1.11.6-web";
+  const WEB_APP_VERSION = "1.12.0-web";
 
   // The Apply Card SMS (SimManager.kt's APPLY_CARD_SMS_TEXT on Android)
   // cannot be sent silently from a browser — there is no such API on
@@ -444,7 +456,7 @@
   // who knows the Android app can find their way around this file.
   // -----------------------------------------------------------------
   let state = {
-    screen: "login",           // login | app | detail | search | campaign
+    screen: "login",           // login | app | detail | search | campaign | training
     tab: 0,                    // 0 Queue, 1 CallBacks, 2 Apply Card
     loading: false,
     saving: false,
@@ -486,7 +498,14 @@
     bankAppSaving: false,
     bankAppEditingId: null,   // null = "new entry" form is closed
     bankAppForm: { bank: "", application_id: "", phone: "", customer_name: "", card_name: "", vkyc_status: "PENDING" },
-    selectedBankApp: null     // row shown on screenBankAppDetail
+    selectedBankApp: null,    // row shown on screenBankAppDetail
+
+    // "T" training material (backend/49_training_material.sql)
+    trainingItems: [],
+    trainingLoading: false,
+    trainingError: null,
+    trainingBusyId: null,     // item whose link is being fetched
+    trainingPlay: null        // {id, url, pdf} — the audio playing inline, or a PDF link to tap
   };
 
   function setState(patch) {
@@ -1190,6 +1209,96 @@
     });
   }
 
+  // -----------------------------------------------------------------
+  // "T" — training material the admin uploads from the dashboard: PDFs open in a
+  // new tab, audio plays on the page. Read-only; files are fetched with the agent's
+  // own login (private bucket), never a public link.
+  // -----------------------------------------------------------------
+  async function openTraining() {
+    setState({ screen: "training", trainingPlay: null });
+    loadTraining();
+  }
+
+  async function loadTraining() {
+    setState({ trainingLoading: true, trainingError: null });
+    const { data, error } = await sb.rpc("list_training_items");
+    if (error) { setState({ trainingLoading: false, trainingError: error.message }); return; }
+    setState({ trainingItems: data || [], trainingLoading: false });
+  }
+
+  async function openTrainingItem(item) {
+    if (state.trainingBusyId) return;
+    // A tab opened AFTER the await below would be treated as a pop-up and blocked, so open it now.
+    const tab = item.kind === "pdf" ? window.open("about:blank", "_blank") : null;
+    setState({ trainingBusyId: item.id, trainingError: null, trainingPlay: null });
+    const { data, error } = await sb.storage.from("training-material").createSignedUrl(item.storage_path, 3600);
+    if (error || !data) {
+      if (tab) tab.close();
+      setState({ trainingBusyId: null, trainingError: "Could not open this file: " + (error ? error.message : "unknown error") });
+      return;
+    }
+    if (item.kind === "pdf") {
+      if (tab) {
+        tab.location.href = data.signedUrl;
+        setState({ trainingBusyId: null });
+      } else {
+        // Pop-ups blocked: show a link to tap instead.
+        setState({ trainingBusyId: null, trainingPlay: { id: item.id, url: data.signedUrl, pdf: true } });
+      }
+    } else {
+      setState({ trainingBusyId: null, trainingPlay: { id: item.id, url: data.signedUrl, pdf: false } });
+    }
+  }
+
+  function renderTraining() {
+    $("trainingRefreshBtn").disabled = state.trainingLoading;
+    const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+    let html = "";
+    if (state.trainingError) html += `<div class="banner-err">${esc(state.trainingError)}</div>`;
+    if (state.trainingLoading && !state.trainingItems.length) {
+      html += `<div class="empty-state"><span class="spinner"></span></div>`;
+    } else if (!state.trainingItems.length) {
+      if (!state.trainingError) html += `<div class="empty-state">Nothing here yet. Your admin will add the calling script, card details and example calls.</div>`;
+    } else {
+      const row = it => {
+        const busy = state.trainingBusyId === it.id;
+        const play = state.trainingPlay && state.trainingPlay.id === it.id ? state.trainingPlay : null;
+        const icon = busy ? '<span class="spinner"></span>' : (it.kind === "pdf" ? "📄" : (play && !play.pdf ? "⏸" : "▶"));
+        return `<div class="lead-card" data-train="${esc(it.id)}" style="cursor:pointer; flex-wrap:wrap">
+          <div class="body">
+            <div class="name" style="white-space:normal">${esc(it.title)}</div>
+            <div class="company">${it.kind === "pdf" ? "PDF" : "Audio"}${it.size_bytes > 0 ? " · " + fmtSize(it.size_bytes) : ""}</div>
+          </div>
+          <div class="side">${icon}</div>
+          ${play && play.pdf ? `<a href="${esc(play.url)}" target="_blank" rel="noopener" style="flex:0 0 100%; margin-top:8px">Tap to open the PDF</a>` : ""}
+          ${play && !play.pdf ? `<audio controls autoplay src="${esc(play.url)}" style="flex:0 0 100%; width:100%; margin-top:8px"></audio>` : ""}
+        </div>`;
+      };
+      const pdfs = state.trainingItems.filter(it => it.kind === "pdf");
+      const audios = state.trainingItems.filter(it => it.kind !== "pdf");
+      if (pdfs.length) html += `<div class="section-label">Scripts and guides</div>` + pdfs.map(row).join("");
+      if (audios.length) html += `<div class="section-label">Call recordings</div>` + audios.map(row).join("");
+    }
+    $("trainingBody").innerHTML = html;
+    $("trainingBody").querySelectorAll("[data-train]").forEach(el => {
+      el.onclick = (ev) => {
+        // Taps on the audio controls or the PDF link belong to them, not to the card.
+        if (ev.target.closest("audio, a")) return;
+        const item = state.trainingItems.find(it => it.id === el.dataset.train);
+        if (!item) return;
+        if (item.kind !== "pdf" && state.trainingPlay && state.trainingPlay.id === item.id) {
+          setState({ trainingPlay: null });   // tap again to stop
+          return;
+        }
+        openTrainingItem(item);
+      };
+    });
+  }
+
+  $("openTrainingBtn").onclick = openTraining;
+  $("trainingBackBtn").onclick = () => setState({ screen: "app", trainingPlay: null });
+  $("trainingRefreshBtn").onclick = loadTraining;
+
   $("openCampaignBtn").onclick = openCampaignPicker;
   $("campaignBackBtn").onclick = () => setState({ screen: "app" });
   // No lead required — see showCardPicker()'s doc comment. Available any
@@ -1426,6 +1535,9 @@
     show($("screenBankAppDetail"), state.screen === "bankAppDetail");
     show($("screenSearch"), state.screen === "search");
     show($("screenCampaign"), state.screen === "campaign");
+    show($("screenTraining"), state.screen === "training");
+    // Leaving T (back, sign-out) must also stop any audio still playing on that hidden page.
+    if (state.screen !== "training" && $("trainingBody").firstChild) $("trainingBody").innerHTML = "";
 
     if (state.screen === "login") renderLogin();
     else if (state.screen === "app") renderApp();
@@ -1433,6 +1545,7 @@
     else if (state.screen === "bankAppDetail") renderBankAppDetail();
     else if (state.screen === "search") renderSearch();
     else if (state.screen === "campaign") renderCampaign();
+    else if (state.screen === "training") renderTraining();
   }
 
   function renderLogin() {
